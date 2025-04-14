@@ -1,0 +1,27 @@
+.card {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 1rem;
+}
+
+.table-responsive {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+#visualizationArea img {
+    max-width: 100%;
+    height: auto;
+}
+
+#queryInput {
+    resize: vertical;
+    min-height: 100px;
+}
+
+.navbar {
+    margin-bottom: 2rem;
+}
+
+.btn-primary {
+    margin-right: 0.5rem;
+}

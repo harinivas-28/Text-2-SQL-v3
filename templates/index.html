@@ -1,0 +1,804 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- Welcome Section -->
+    <div class="col-12">
+        <div class="welcome-banner animate__animated animate__fadeIn">
+            <div class="row align-items-center">
+                <div class="col-lg-8">
+                    <h1 class="display-5 fw-bold mb-3">Transform Natural Language to SQL</h1>
+                    <p class="lead mb-4">Upload your CSV data and ask questions in plain English. Our AI will convert your queries into SQL and deliver instant insights.</p>
+                    <div class="d-flex gap-3">
+                        <a href="#uploadSection" class="btn btn-primary btn-lg px-4 me-md-2">
+                            <i class="fas fa-upload me-2"></i>Get Started
+                        </a>
+                        <a href="/examples" class="btn btn-outline-secondary btn-lg px-4">
+                            <i class="fas fa-lightbulb me-2"></i>See Examples
+                        </a>
+                    </div>
+                </div>
+                <div class="col-lg-4 d-none d-lg-block text-center">
+                    <div class="icon-container">
+                        <i class="fas fa-database primary-icon"></i>
+                        <i class="fas fa-arrows-alt-h arrow-icon"></i>
+                        <i class="fas fa-code secondary-icon"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Section -->
+    <div id="uploadSection" class="col-12">
+        <div class="card border-0 shadow-sm animate__animated animate__fadeInUp">
+            <div class="card-header bg-gradient position-relative">
+                <div class="header-icon">
+                    <i class="fas fa-file-upload"></i>
+                </div>
+                <h5 class="card-title mb-0 ps-5 py-3">Upload Your Data</h5>
+            </div>
+            <div class="card-body p-4">
+                <form id="uploadForm" enctype="multipart/form-data" class="upload-form">
+                    <div class="upload-zone mb-4" id="dropZone">
+                        <input type="file" class="file-input" id="csvFile" accept=".csv" required>
+                        <div class="upload-content text-center p-5">
+                            <i class="fas fa-cloud-upload-alt fa-3x mb-3"></i>
+                            <h5>Drag & Drop your CSV file here</h5>
+                            <p class="text-muted">or</p>
+                            <button type="button" class="btn btn-outline-primary px-4" id="browseBtn">
+                                Browse Files
+                            </button>
+                            <p class="small text-muted mt-3">Maximum file size: 10MB</p>
+                        </div>
+                        <div class="selected-file d-none" id="selectedFile">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-file-csv file-icon me-3"></i>
+                                <div class="file-info flex-grow-1">
+                                    <h6 class="file-name mb-0" id="fileName">filename.csv</h6>
+                                    <span class="file-size small text-muted" id="fileSize">0 KB</span>
+                                </div>
+                                <button type="button" class="btn-close" id="removeFile"></button>
+                            </div>
+                            <div class="progress mt-3" id="uploadProgress">
+                                <div class="progress-bar bg-primary" role="progressbar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary px-4" id="uploadBtn">
+                            <i class="fas fa-upload me-2"></i>Upload & Process
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Preview Section -->
+    <div class="col-12">
+        <div class="card border-0 shadow-sm animate__animated animate__fadeInUp" style="animation-delay: 0.1s;">
+            <div class="card-header bg-gradient position-relative">
+                <div class="header-icon">
+                    <i class="fas fa-table"></i>
+                </div>
+                <h5 class="card-title mb-0 ps-5 py-3">Data Preview</h5>
+                <div class="card-tools">
+                    <button type="button" class="btn btn-tool" data-bs-toggle="collapse" data-bs-target="#previewCollapse">
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="collapse show" id="previewCollapse">
+                <div class="card-body p-0">
+                    <div id="previewArea" class="table-responsive">
+                        <div class="no-data-message text-center p-5">
+                            <i class="fas fa-database fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">Upload a CSV file to preview your data</h5>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+                    <div class="data-stats d-none" id="dataStats">
+                        <span class="badge bg-light text-dark me-2"><i class="fas fa-table me-1"></i><span id="rowCount">0</span> rows</span>
+                        <span class="badge bg-light text-dark me-2"><i class="fas fa-columns me-1"></i><span id="colCount">0</span> columns</span>
+                    </div>
+                    <div class="pagination-controls d-none" id="paginationControls">
+                        <button class="btn btn-sm btn-outline-secondary me-2" id="prevPage">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <span id="pageInfo">Page 1 of 1</span>
+                        <button class="btn btn-sm btn-outline-secondary ms-2" id="nextPage">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Query Section -->
+    <div class="col-12">
+        <div class="card border-0 shadow-sm animate__animated animate__fadeInUp" style="animation-delay: 0.2s;">
+            <div class="card-header bg-gradient position-relative">
+                <div class="header-icon query-icon">
+                    <i class="fas fa-search"></i>
+                </div>
+                <h5 class="card-title mb-0 ps-5 py-3">Ask Questions About Your Data</h5>
+            </div>
+            <div class="card-body p-4">
+                <div class="query-examples mb-3">
+                    <p class="text-muted mb-2">Try these example questions:</p>
+                    <div class="example-queries d-flex flex-wrap gap-2" id="exampleQueries">
+                        <!-- Example queries will be dynamically populated based on the uploaded data -->
+                    </div>
+                </div>
+                <div class="mb-4 position-relative">
+                    <div class="query-input-container">
+                        <textarea class="form-control query-input" id="queryInput" rows="3" placeholder="Ask a question about your data in plain English..."></textarea>
+                        <div class="query-input-icon">
+                            <i class="fas fa-keyboard"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="showSQL">
+                        <label class="form-check-label" for="showSQL">
+                            Show generated SQL
+                        </label>
+                    </div>
+                    <button id="submitQuery" class="btn btn-primary px-4">
+                        <i class="fas fa-bolt me-2"></i>Generate Insights
+                        <span class="ms-2 spinner-border spinner-border-sm d-none" id="querySpinner"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Section -->
+    <div class="col-12">
+        <div class="card border-0 shadow-sm animate__animated animate__fadeInUp" style="animation-delay: 0.3s;">
+            <div class="card-header bg-gradient position-relative">
+                <div class="header-icon results-icon">
+                    <i class="fas fa-chart-bar"></i>
+                </div>
+                <h5 class="card-title mb-0 ps-5 py-3">Results & Visualizations</h5>
+                <div class="card-tools">
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-light dropdown-toggle" type="button" id="exportDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-download me-1"></i>Export
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="exportDropdown">
+                            <li><a class="dropdown-item" href="#" id="exportCSV"><i class="fas fa-file-csv me-2"></i>CSV</a></li>
+                            <li><a class="dropdown-item" href="#" id="exportJSON"><i class="fas fa-file-code me-2"></i>JSON</a></li>
+                            <li><a class="dropdown-item" href="#" id="exportPDF"><i class="fas fa-file-pdf me-2"></i>PDF</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <!-- SQL Query Display (Initially Hidden) -->
+                <div class="sql-display d-none" id="sqlDisplay">
+                    <div class="d-flex align-items-center justify-content-between p-3 bg-light border-bottom">
+                        <h6 class="mb-0"><i class="fas fa-code me-2"></i>Generated SQL Query</h6>
+                        <button class="btn btn-sm btn-outline-secondary copy-btn" id="copySQL">
+                            <i class="fas fa-copy me-1"></i>Copy
+                        </button>
+                    </div>
+                    <pre class="p-3 bg-light mb-0"><code id="sqlCode" class="sql">-- Your SQL query will appear here</code></pre>
+                </div>
+                
+                <!-- Tab Navigation for Results -->
+                <ul class="nav nav-tabs" id="resultsTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="table-tab" data-bs-toggle="tab" data-bs-target="#table-view" type="button" role="tab" aria-controls="table-view" aria-selected="true">
+                            <i class="fas fa-table me-2"></i>Table View
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="chart-tab" data-bs-toggle="tab" data-bs-target="#chart-view" type="button" role="tab" aria-controls="chart-view" aria-selected="false">
+                            <i class="fas fa-chart-line me-2"></i>Chart View
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="summary-tab" data-bs-toggle="tab" data-bs-target="#summary-view" type="button" role="tab" aria-controls="summary-view" aria-selected="false">
+                            <i class="fas fa-list-alt me-2"></i>Summary
+                        </button>
+                    </li>
+                </ul>
+
+                <!-- Tab Content -->
+                <div class="tab-content" id="resultsTabContent">
+                    <div class="tab-pane fade show active" id="table-view" role="tabpanel" aria-labelledby="table-tab">
+                        <div id="queryResult" class="p-0">
+                            <div class="no-results-message text-center p-5">
+                                <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                                <h5 class="text-muted">Ask a question to see results</h5>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tab-pane fade" id="chart-view" role="tabpanel" aria-labelledby="chart-tab">
+                        <div class="p-4">
+                            <div class="chart-controls mb-3 d-none" id="chartControls">
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label">Chart Type</label>
+                                        <select class="form-select" id="chartType">
+                                            <option value="bar">Bar Chart</option>
+                                            <option value="line">Line Chart</option>
+                                            <option value="pie">Pie Chart</option>
+                                            <option value="scatter">Scatter Plot</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">X-Axis</label>
+                                        <select class="form-select" id="xAxis"></select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Y-Axis</label>
+                                        <select class="form-select" id="yAxis"></select>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="visualizationArea" class="chart-container">
+                                <div class="no-chart-message text-center p-5">
+                                    <i class="fas fa-chart-area fa-3x text-muted mb-3"></i>
+                                    <h5 class="text-muted">No data available for visualization</h5>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tab-pane fade" id="summary-view" role="tabpanel" aria-labelledby="summary-tab">
+                        <div id="summaryArea" class="p-4">
+                            <div class="no-summary-message text-center p-5">
+                                <i class="fas fa-clipboard-list fa-3x text-muted mb-3"></i>
+                                <h5 class="text-muted">Run a query to see summary statistics</h5>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-white d-none" id="resultFooter">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="result-stats">
+                        <span class="badge bg-light text-dark me-2"><i class="fas fa-clock me-1"></i><span id="queryTime">0</span> ms</span>
+                        <span class="badge bg-light text-dark"><i class="fas fa-table me-1"></i><span id="resultCount">0</span> results</span>
+                    </div>
+                    <div class="pagination-controls" id="resultPagination">
+                        <button class="btn btn-sm btn-outline-secondary me-2" id="prevResultPage">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <span id="resultPageInfo">Page 1 of 1</span>
+                        <button class="btn btn-sm btn-outline-secondary ms-2" id="nextResultPage">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Welcome Banner */
+    .welcome-banner {
+        .welcome-banner {
+            background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.8) 100%), url("{{ url_for('static', filename='img/pattern.svg') }}");
+            background-size: cover;
+            border-radius: 15px;
+            padding: 2.5rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            margin-bottom: 1.5rem;
+        }
+    }
+    .icon-container {
+        position: relative;
+        height: 150px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .primary-icon, .secondary-icon {
+        font-size: 5rem;
+        padding: 20px;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        color: var(--primary-color);
+    }
+
+    .secondary-icon {
+        color: var(--secondary-color);
+    }
+
+    .arrow-icon {
+        position: absolute;
+        font-size: 2rem;
+        color: var(--accent-color);
+        animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+        0% {
+            transform: scale(1);
+            opacity: 1;
+        }
+        50% {
+            transform: scale(1.2);
+            opacity: 0.7;
+        }
+        100% {
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
+
+    /* Card styling */
+    .card {
+        overflow: hidden;
+        transition: transform 0.3s, box-shadow 0.3s;
+    }
+
+    .card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 15px 30px rgba(0,0,0,0.1) !important;
+    }
+
+    .card-header {
+        background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+        color: white;
+        border: none;
+    }
+
+    .header-icon {
+        position: absolute;
+        left: 15px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 36px;
+        height: 36px;
+        background: rgba(255,255,255,0.2);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .query-icon {
+        background: rgba(255,255,255,0.3);
+    }
+
+    .results-icon {
+        background: rgba(255,255,255,0.4);
+    }
+
+    .card-tools {
+        position: absolute;
+        right: 15px;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+
+    .btn-tool {
+        color: white;
+        background: transparent;
+        border: none;
+        padding: 0.25rem;
+    }
+
+    /* Upload zone styling */
+    .upload-zone {
+        border: 2px dashed #dee2e6;
+        border-radius: 10px;
+        position: relative;
+        transition: all 0.3s;
+    }
+
+    .upload-zone:hover, .upload-zone.dragover {
+        border-color: var(--primary-color);
+        background-color: rgba(67, 97, 238, 0.05);
+    }
+
+    .file-input {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        cursor: pointer;
+        z-index: 2;
+    }
+
+    .selected-file {
+        padding: 1.5rem;
+        background-color: rgba(67, 97, 238, 0.05);
+        border-radius: 10px;
+    }
+
+    .file-icon {
+        font-size: 2rem;
+        color: var(--primary-color);
+    }
+
+    /* Query input styling */
+    .query-input-container {
+        position: relative;
+    }
+
+    .query-input {
+        padding-right: 40px;
+        resize: none;
+        border-radius: 10px;
+        border: 1px solid #dee2e6;
+        transition: all 0.3s;
+        font-size: 1rem;
+    }
+
+    .query-input:focus {
+        box-shadow: 0 0 0 0.25rem rgba(67, 97, 238, 0.25);
+        border-color: var(--primary-color);
+    }
+
+    .query-input-icon {
+        position: absolute;
+        right: 15px;
+        bottom: 15px;
+        color: #adb5bd;
+    }
+
+    /* Example queries */
+    .example-query {
+        transition: all 0.3s;
+        border-radius: 20px;
+    }
+
+    .example-query:hover {
+        background-color: var(--primary-color);
+        color: white;
+    }
+
+    /* Tab styling */
+    .nav-tabs {
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    .nav-tabs .nav-link {
+        border: none;
+        color: #6c757d;
+        padding: 1rem 1.5rem;
+        transition: all 0.3s;
+    }
+
+    .nav-tabs .nav-link:hover {
+        color: var(--primary-color);
+        border-bottom: 2px solid #dee2e6;
+    }
+
+    .nav-tabs .nav-link.active {
+        color: var(--primary-color);
+        background-color: transparent;
+        border-bottom: 2px solid var(--primary-color);
+    }
+
+    /* Chart container */
+    .chart-container {
+        height: 400px;
+        position: relative;
+    }
+
+    /* SQL display */
+    .sql-display {
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    .copy-btn {
+        transition: all 0.3s;
+    }
+
+    .copy-btn:hover {
+        background-color: var(--primary-color);
+        color: white;
+        border-color: var(--primary-color);
+    }
+
+    /* Animation delays for staggered appearance */
+    .animate__fadeInUp:nth-child(1) {
+        animation-delay: 0.1s;
+    }
+    .animate__fadeInUp:nth-child(2) {
+        animation-delay: 0.2s;
+    }
+    .animate__fadeInUp:nth-child(3) {
+        animation-delay: 0.3s;
+    }
+    .animate__fadeInUp:nth-child(4) {
+        animation-delay: 0.4s;
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // File upload interaction
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('csvFile');
+        const browseBtn = document.getElementById('browseBtn');
+        const selectedFile = document.getElementById('selectedFile');
+        const uploadContent = document.querySelector('.upload-content');
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+        const removeFile = document.getElementById('removeFile');
+        const progress = document.getElementById('uploadProgress').querySelector('.progress-bar');
+        
+        // Simulate drag and drop functionality
+        dropZone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        
+        dropZone.addEventListener('dragleave', function() {
+            dropZone.classList.remove('dragover');
+        });
+        
+        dropZone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                updateFileInfo();
+            }
+        });
+        
+        browseBtn.addEventListener('click', function() {
+            fileInput.click();
+        });
+        
+        fileInput.addEventListener('change', updateFileInfo);
+        
+        removeFile.addEventListener('click', function() {
+            fileInput.value = '';
+            uploadContent.classList.remove('d-none');
+            selectedFile.classList.add('d-none');
+            progress.style.width = '0%';
+        });
+        
+        function updateFileInfo() {
+            if (fileInput.files.length) {
+                const file = fileInput.files[0];
+                fileName.textContent = file.name;
+                fileSize.textContent = formatFileSize(file.size);
+                uploadContent.classList.add('d-none');
+                selectedFile.classList.remove('d-none');
+            }
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' bytes';
+            else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+            else return (bytes / 1048576).toFixed(1) + ' MB';
+        }
+        
+        // Form submission with progress
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            if (!fileInput.files.length) {
+                alert('Please select a file to upload');
+                return;
+            }
+            
+            // Simulate upload progress
+            let width = 0;
+            const interval = setInterval(function() {
+                width += 5;
+                progress.style.width = width + '%';
+                
+                if (width >= 100) {
+                    clearInterval(interval);
+                    setTimeout(function() {
+                        simulateDataPreview();
+                    }, 500);
+                }
+            }, 50);
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            const response = await fetch('/upload', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+            if (result.stats) {
+                updateExampleQueries(result.stats);
+            }
+        });
+        
+        // Modify simulateDataPreview function to remove sample data
+        function simulateDataPreview() {
+            const previewArea = document.getElementById('previewArea');
+            const dataStats = document.getElementById('dataStats');
+            const paginationControls = document.getElementById('paginationControls');
+            
+            // Don't generate any sample data here
+            // The actual data will come from the server response
+            dataStats.classList.remove('d-none');
+            paginationControls.classList.remove('d-none');
+        }
+        
+        // Remove all sample data generation functions
+        function generateSampleResults() {
+            return '<div class="p-4 text-center">Processing query...</div>';
+        }
+
+        function generateSampleChart() {
+            const chartArea = document.getElementById('visualizationArea');
+            chartArea.innerHTML = '<div class="p-4 text-center">Processing visualization...</div>';
+        }
+
+        function generateSampleSummary() {
+            const summaryArea = document.getElementById('summaryArea');
+            summaryArea.innerHTML = '<div class="p-4 text-center">Processing summary...</div>';
+        }
+
+        // Handle query submission
+        document.getElementById('submitQuery').addEventListener('click', function() {
+            const queryInput = document.getElementById('queryInput');
+            const querySpinner = document.getElementById('querySpinner');
+            const showSQL = document.getElementById('showSQL');
+            const sqlDisplay = document.getElementById('sqlDisplay');
+            const sqlCode = document.getElementById('sqlCode');
+            const resultFooter = document.getElementById('resultFooter');
+            const queryTime = document.getElementById('queryTime');
+            const resultCount = document.getElementById('resultCount');
+            const chartControls = document.getElementById('chartControls');
+            
+            if (!queryInput.value.trim()) {
+                alert('Please enter a query');
+                return;
+            }
+            
+            // Show loading state
+            querySpinner.classList.remove('d-none');
+            this.disabled = true;
+            
+            // Simulate processing delay
+            setTimeout(function() {
+                querySpinner.classList.add('d-none');
+                document.getElementById('submitQuery').disabled = false;
+                
+                // Display SQL if checkbox is checked
+                if (showSQL.checked) {
+                    sqlDisplay.classList.remove('d-none');
+                    sqlCode.textContent = generateSampleSQL(queryInput.value);
+                } else {
+                    sqlDisplay.classList.add('d-none');
+                }
+                
+                // Display results
+                document.querySelector('#table-view .no-results-message').style.display = 'none';
+                document.querySelector('#queryResult').innerHTML = generateSampleResults();
+                resultFooter.classList.remove('d-none');
+                
+                // Update result stats
+                queryTime.textContent = Math.floor(Math.random() * 300) + 100;
+                resultCount.textContent = Math.floor(Math.random() * 50) + 10;
+                
+                // Show chart controls
+                chartControls.classList.remove('d-none');
+                
+                // Generate sample chart
+                document.querySelector('#chart-view .no-chart-message').style.display = 'none';
+                generateSampleChart();
+                
+                // Generate sample summary
+                document.querySelector('#summary-view .no-summary-message').style.display = 'none';
+                generateSampleSummary();
+                
+                // Switch to table view tab
+                document.getElementById('table-tab').click();
+                
+                // Populate axis selectors
+                populateAxisSelectors();
+            }, 1500);
+        });
+        
+        // Generate sample SQL based on query
+        function generateSampleSQL(query) {
+            if (query.toLowerCase().includes('average')) {
+                return "SELECT AVG(salary) AS average_salary\nFROM employees\nGROUP BY department\nORDER BY average_salary DESC;";
+            } else if (query.toLowerCase().includes('top')) {
+                return "SELECT *\nFROM employees\nORDER BY salary DESC\nLIMIT 5;";
+            } else if (query.toLowerCase().includes('where')) {
+                return "SELECT *\nFROM employees\nWHERE age > 30;";
+            } else {
+                return "-- SQL query generated based on your input";
+            }
+        }
+
+        // Populate axis selectors for chart controls
+        function populateAxisSelectors() {
+            const columns = ['ID', 'Name', 'Department', 'Salary', 'Age'];
+            const xAxis = document.getElementById('xAxis');
+            const yAxis = document.getElementById('yAxis');
+            
+            xAxis.innerHTML = '';
+            yAxis.innerHTML = '';
+            
+            columns.forEach(column => {
+                xAxis.innerHTML += `<option value="${column}">${column}</option>`;
+                yAxis.innerHTML += `<option value="${column}">${column}</option>`;
+            });
+            
+            // Set default selections
+            yAxis.value = 'Salary';
+            xAxis.value = 'Department';
+        }
+
+        // Initialize chart controls event listeners
+        document.getElementById('chartType').addEventListener('change', generateSampleChart);
+        document.getElementById('xAxis').addEventListener('change', generateSampleChart);
+        document.getElementById('yAxis').addEventListener('change', generateSampleChart);
+
+        // Copy SQL button functionality
+        document.getElementById('copySQL').addEventListener('click', function() {
+            const sqlCode = document.getElementById('sqlCode').textContent;
+            navigator.clipboard.writeText(sqlCode).then(() => {
+                this.innerHTML = '<i class="fas fa-check me-1"></i>Copied!';
+                setTimeout(() => {
+                    this.innerHTML = '<i class="fas fa-copy me-1"></i>Copy';
+                }, 2000);
+            });
+        });
+
+        // Handle example query clicks
+        document.querySelectorAll('.example-query').forEach(button => {
+            button.addEventListener('click', function() {
+                const queryInput = document.getElementById('queryInput');
+                queryInput.value = this.getAttribute('data-query');
+                queryInput.focus();
+            });
+        });
+
+        // Update example queries based on uploaded data
+        function updateExampleQueries(stats) {
+            const exampleQueries = document.getElementById('exampleQueries');
+            const queries = [];
+            
+            // Basic queries
+            queries.push('Show all rows from the table');
+            queries.push('Show me the first 5 rows');
+            queries.push(`Show total count of rows`);
+            
+            // Add column-specific queries
+            if (stats && stats.columns) {
+                const numericColumns = stats.columns.filter(col => 
+                    ['int64', 'float64'].includes(col.dtype));
+                
+                if (numericColumns.length > 0) {
+                    const col = numericColumns[0].name;
+                    queries.push(`What is the average ${col}?`);
+                    queries.push(`Show maximum ${col}`);
+                }
+            }
+            
+            // Update the UI
+            exampleQueries.innerHTML = queries.map(query => 
+                `<button class="btn btn-sm btn-light example-query" data-query="${query}">${query}</button>`
+            ).join('');
+            
+            // Reattach click handlers
+            document.querySelectorAll('.example-query').forEach(button => {
+                button.addEventListener('click', function() {
+                    document.getElementById('queryInput').value = this.getAttribute('data-query');
+                });
+            });
+        }
+    });
+</script>
+
+{% endblock %}
