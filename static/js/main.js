@@ -8,9 +8,10 @@ document.getElementById('uploadForm').addEventListener('submit', async function(
     e.preventDefault();
     
     if (isProcessing) {
+        showError('Please wait, a file is being processed');
         return; // Prevent multiple submissions
     }
-
+    
     // Clear any existing timeout
     if (processTimeout) {
         clearTimeout(processTimeout);
@@ -293,42 +294,96 @@ function updateAxisSelectors(columns) {
 }
 
 function showError(message) {
-    const alertDiv = document.createElement('div');
-    alertDiv.className = 'alert alert-danger alert-dismissible fade show';
-    alertDiv.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    `;
-    document.getElementById('alertArea').appendChild(alertDiv);
-    
-    // Auto-remove after 5 seconds
-    setTimeout(() => alertDiv.remove(), 5000);
+    const toastContainer = document.getElementById('toastContainer') || createToastContainer();
+    const toast = document.createElement('div');
+    toast.className = 'toast-notification error';
+    toast.innerHTML = `
+        <div class="toast-content">
+            <i class="fas fa-exclamation-circle"></i>
+            <span>${message}</span>
+            <button type="button" class="toast-close" onclick="this.parentElement.parentElement.remove()">&times;</button>
+        </div>`;
+    toastContainer.appendChild(toast);
+    setTimeout(() => toast && toast.remove(), 5000);
 }
 
 function showSuccess(message) {
-    const alertDiv = document.createElement('div');
-    alertDiv.className = 'alert alert-success alert-dismissible fade show';
-    alertDiv.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    `;
-    document.getElementById('alertArea').appendChild(alertDiv);
-    
-    // Auto-remove after 5 seconds
-    setTimeout(() => alertDiv.remove(), 5000);
+    const toastContainer = document.getElementById('toastContainer') || createToastContainer();
+    const toast = document.createElement('div');
+    toast.className = 'toast-notification success';
+    toast.innerHTML = `
+        <div class="toast-content">
+            <i class="fas fa-check-circle"></i>
+            <span>${message}</span>
+            <button type="button" class="toast-close" onclick="this.parentElement.parentElement.remove()">&times;</button>
+        </div>`;
+    toastContainer.appendChild(toast);
+    setTimeout(() => toast && toast.remove(), 5000);
 }
 
+function createToastContainer() {
+    const container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999;';
+    document.body.appendChild(container);
+    return container;
+}
+
+// Add styles to the document
+const style = document.createElement('style');
+style.textContent = `
+    .toast-notification {
+        padding: 15px;
+        margin-bottom: 10px;
+        border-radius: 4px;
+        color: white;
+        width: 300px;
+        animation: slideIn 0.5s;
+    }
+    .toast-notification.error {
+        background-color: #dc3545;
+    }
+    .toast-notification.success {
+        background-color: #198754;
+    }
+    .toast-content {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .toast-close {
+        background: transparent;
+        border: none;
+        color: white;
+        font-size: 1.2em;
+        margin-left: auto;
+        cursor: pointer;
+        padding: 0 5px;
+    }
+    .toast-close:hover {
+        opacity: 0.8;
+    }
+    @keyframes slideIn {
+        from { transform: translateX(100%); }
+        to { transform: translateX(0); }
+    }
+`;
+document.head.appendChild(style);
+
 function updateDataStats(previewHTML) {
-    // Parse the preview HTML to get row and column counts
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = previewHTML;
-    const table = tempDiv.querySelector('table');
-    
-    if (table) {
-        const rowCount = table.getElementsByTagName('tr').length - 1; // Subtract header row
-        const colCount = table.getElementsByTagName('th').length;
+    try {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = previewHTML;
+        const table = tempDiv.querySelector('table');
         
-        document.getElementById('rowCount').textContent = rowCount;
-        document.getElementById('colCount').textContent = colCount;
+        if (table) {
+            const rowCount = table.getElementsByTagName('tr').length - 1; // Subtract header row
+            const colCount = table.getElementsByTagName('th').length;
+            
+            document.getElementById('rowCount').textContent = rowCount;
+            document.getElementById('colCount').textContent = colCount;
+        }
+    } catch (error) {
+        showError('Error updating data statistics');
     }
 }

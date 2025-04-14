@@ -586,50 +586,135 @@
             e.preventDefault();
             
             if (!fileInput.files.length) {
-                alert('Please select a file to upload');
+                showError('Please select a file to upload');
                 return;
             }
             
-            // Simulate upload progress
-            let width = 0;
-            const interval = setInterval(function() {
-                width += 5;
-                progress.style.width = width + '%';
-                
-                if (width >= 100) {
-                    clearInterval(interval);
-                    setTimeout(function() {
-                        simulateDataPreview();
-                    }, 500);
-                }
-            }, 50);
-
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
+            
+            // Show loading state
+            const previewArea = document.getElementById('previewArea');
+            previewArea.innerHTML = `
+                <div class="text-center p-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Processing your data...</p>
+                </div>`;
+            
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
 
-            const response = await fetch('/upload', {
-                method: 'POST',
-                body: formData
-            });
+                const result = await response.json();
+                
+                if (!result.success) {
+                    showError(result.error || 'Upload failed');
+                    return;
+                }
 
-            const result = await response.json();
-            if (result.stats) {
+                // Update preview and stats
+                previewArea.innerHTML = result.preview;
+                updateDataStats(result.stats);
                 updateExampleQueries(result.stats);
+                
+                // Show success message
+                showSuccess('File uploaded and processed successfully');
+                
+            } catch (error) {
+                showError('Error uploading file: ' + error.message);
+                previewArea.innerHTML = `
+                    <div class="text-center p-4">
+                        <i class="fas fa-exclamation-triangle text-warning fa-3x mb-3"></i>
+                        <h5 class="text-muted">Upload failed. Please try again.</h5>
+                    </div>`;
             }
         });
-        
-        // Modify simulateDataPreview function to remove sample data
-        function simulateDataPreview() {
-            const previewArea = document.getElementById('previewArea');
-            const dataStats = document.getElementById('dataStats');
-            const paginationControls = document.getElementById('paginationControls');
+
+        // Update submit query handler
+        document.getElementById('submitQuery').addEventListener('click', async function() {
+            const queryInput = document.getElementById('queryInput');
+            const querySpinner = document.getElementById('querySpinner');
+            const showSQL = document.getElementById('showSQL');
+            const sqlDisplay = document.getElementById('sqlDisplay');
+            const sqlCode = document.getElementById('sqlCode');
+            const resultFooter = document.getElementById('resultFooter');
             
-            // Don't generate any sample data here
-            // The actual data will come from the server response
-            dataStats.classList.remove('d-none');
-            paginationControls.classList.remove('d-none');
+            if (!queryInput.value.trim()) {
+                showError('Please enter a query');
+                return;
+            }
+            
+            // Show loading state
+            querySpinner.classList.remove('d-none');
+            this.disabled = true;
+            
+            try {
+                const response = await fetch('/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        query: queryInput.value,
+                        filename: currentFileName
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (result.error) {
+                    showError(result.error);
+                    return;
+                }
+
+                // Display SQL
+                if (showSQL.checked) {
+                    sqlDisplay.classList.remove('d-none');
+                    sqlCode.textContent = result.sql_query;
+                }
+
+                // Update visualizations and results
+                updateResults(result);
+                
+            } catch (error) {
+                showError('Error processing query: ' + error.message);
+            } finally {
+                querySpinner.classList.add('d-none');
+                this.disabled = false;
+            }
+        });
+
+        function updateResults(result) {
+            // Update table view
+            document.querySelector('#table-view .no-results-message').style.display = 'none';
+            displayResults(result.result);
+            
+            // Update visualization
+            document.querySelector('#chart-view .no-chart-message').style.display = 'none';
+            if (result.plot) {
+                document.getElementById('visualizationArea').innerHTML = 
+                    `<img src="data:image/png;base64,${result.plot}" class="img-fluid" alt="Data visualization">`;
+            }
+            
+            // Update summary
+            document.querySelector('#summary-view .no-summary-message').style.display = 'none';
+            updateSummary(result.summary);
+            
+            // Show controls and footer
+            document.getElementById('chartControls').classList.remove('d-none');
+            document.getElementById('resultFooter').classList.remove('d-none');
+            
+            // Update stats
+            document.getElementById('resultCount').textContent = result.result.length;
+            
+            // Update axis selectors
+            updateAxisSelectors(result.columns);
         }
-        
+
         // Remove all sample data generation functions
         function generateSampleResults() {
             return '<div class="p-4 text-center">Processing query...</div>';
@@ -645,68 +730,6 @@
             summaryArea.innerHTML = '<div class="p-4 text-center">Processing summary...</div>';
         }
 
-        // Handle query submission
-        document.getElementById('submitQuery').addEventListener('click', function() {
-            const queryInput = document.getElementById('queryInput');
-            const querySpinner = document.getElementById('querySpinner');
-            const showSQL = document.getElementById('showSQL');
-            const sqlDisplay = document.getElementById('sqlDisplay');
-            const sqlCode = document.getElementById('sqlCode');
-            const resultFooter = document.getElementById('resultFooter');
-            const queryTime = document.getElementById('queryTime');
-            const resultCount = document.getElementById('resultCount');
-            const chartControls = document.getElementById('chartControls');
-            
-            if (!queryInput.value.trim()) {
-                alert('Please enter a query');
-                return;
-            }
-            
-            // Show loading state
-            querySpinner.classList.remove('d-none');
-            this.disabled = true;
-            
-            // Simulate processing delay
-            setTimeout(function() {
-                querySpinner.classList.add('d-none');
-                document.getElementById('submitQuery').disabled = false;
-                
-                // Display SQL if checkbox is checked
-                if (showSQL.checked) {
-                    sqlDisplay.classList.remove('d-none');
-                    sqlCode.textContent = generateSampleSQL(queryInput.value);
-                } else {
-                    sqlDisplay.classList.add('d-none');
-                }
-                
-                // Display results
-                document.querySelector('#table-view .no-results-message').style.display = 'none';
-                document.querySelector('#queryResult').innerHTML = generateSampleResults();
-                resultFooter.classList.remove('d-none');
-                
-                // Update result stats
-                queryTime.textContent = Math.floor(Math.random() * 300) + 100;
-                resultCount.textContent = Math.floor(Math.random() * 50) + 10;
-                
-                // Show chart controls
-                chartControls.classList.remove('d-none');
-                
-                // Generate sample chart
-                document.querySelector('#chart-view .no-chart-message').style.display = 'none';
-                generateSampleChart();
-                
-                // Generate sample summary
-                document.querySelector('#summary-view .no-summary-message').style.display = 'none';
-                generateSampleSummary();
-                
-                // Switch to table view tab
-                document.getElementById('table-tab').click();
-                
-                // Populate axis selectors
-                populateAxisSelectors();
-            }, 1500);
-        });
-        
         // Generate sample SQL based on query
         function generateSampleSQL(query) {
             if (query.toLowerCase().includes('average')) {
@@ -797,6 +820,16 @@
                     document.getElementById('queryInput').value = this.getAttribute('data-query');
                 });
             });
+        }
+
+        // Show error message
+        function showError(message) {
+            alert(message);
+        }
+
+        // Show success message
+        function showSuccess(message) {
+            alert(message);
         }
     });
 </script>
