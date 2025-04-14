@@ -14,6 +14,7 @@ import requests
 from urllib.error import URLError
 import json
 from dotenv import load_dotenv
+import re
 
 load_dotenv()  # Add this near the top of the file, after imports
 
@@ -21,8 +22,8 @@ app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Replace the model initialization with API configuration
-API_URL = "https://api-inference.huggingface.co/models/gaussalgo/T5-LM-Large-text2sql-spider"
+# Change model to a better performing one
+API_URL = "https://api-inference.huggingface.co/models/mrm8488/t5-base-finetuned-wikiSQL"
 headers = {"Authorization": f"Bearer {os.getenv('HUGGINGFACE_TOKEN')}"}
 
 def query_model(payload):
@@ -63,7 +64,6 @@ def create_table_schema_from_df(df):
 
 def validate_sql_query(query):
     """Validate and clean SQL query"""
-    # Remove any trailing incomplete clauses
     query = query.strip()
     
     # Remove SQL prefix if present
@@ -97,54 +97,114 @@ def validate_sql_query(query):
 
     return query
 
-def generate_sql_query(natural_language_query, table_schema):
-    """Generate SQL query using Hugging Face API"""
+def get_column_details(df):
+    """Get detailed information about columns"""
+    details = []
+    for col in df.columns:
+        dtype = str(df[col].dtype)
+        sample_values = df[col].dropna().head(3).tolist()
+        details.append({
+            'name': col,
+            'type': dtype,
+            'sample_values': sample_values
+        })
+    return details
+
+def generate_sql_query(natural_language_query, table_schema, df):
+    """Generate SQL query using Hugging Face API with enhanced context"""
     try:
-        # Add hints to the input prompt
+        # Get sample data and column info
+        sample_data = df.head(3).to_dict('records')
+        column_types = {col: str(dtype) for col, dtype in df.dtypes.items()}
+        
+        # Create a more structured prompt
+        prompt = {
+            "question": natural_language_query,
+            "table_name": "data_table",
+            "columns": list(df.columns),
+            "column_types": column_types,
+            "sample_data": sample_data
+        }
+        
+        # Format the prompt for the model
         input_text = (
-            f"tables:\n{table_schema}\n"
-            f"query for:{natural_language_query}\n"
-            "Generate a complete, valid SQL query. Include all necessary clauses and proper column names."
+            f"Convert to SQL: {natural_language_query}\n"
+            f"Table: data_table\n"
+            f"Columns: {', '.join(df.columns)}\n"
+            f"Sample data:\n{pd.DataFrame(sample_data).to_string()}\n"
+            "SQL:"
         )
         
-        logging.info(f"Input to model: {input_text}")
+        logging.info(f"Prompt to model:\n{input_text}")
+        
+        # Get SQL from model
         response = query_model({"inputs": input_text})
         
         if isinstance(response, list) and len(response) > 0:
             sql_query = response[0]['generated_text']
-            logging.info(f"Raw SQL from model: {sql_query}")
+            logging.info(f"Raw SQL: {sql_query}")
             
-            # Validate and clean the query
-            sql_query = validate_sql_query(sql_query)
-            logging.info(f"Processed SQL query: {sql_query}")
+            # Clean the query
+            sql_query = clean_sql_query(sql_query, df.columns)
+            logging.info(f"Cleaned SQL: {sql_query}")
             
-            # Test query syntax
-            if not is_valid_sql(sql_query):
-                raise ValueError("Generated SQL query is not valid")
-                
             return sql_query
-        else:
-            raise ValueError("Model returned invalid response")
             
+        raise ValueError("Model returned invalid response")
+        
     except Exception as e:
-        logging.error(f"Error generating SQL: {str(e)}")
-        logging.error(f"Response: {response if 'response' in locals() else 'No response'}")
-        raise Exception(str(e))
+        logging.error(f"SQL generation error: {str(e)}")
+        raise
+
+def clean_sql_query(query, valid_columns):
+    """Clean and validate SQL query"""
+    query = query.strip()
+    
+    # Remove common prefixes
+    prefixes = ['SELECT SQL', 'SQL:', 'SQLITE:', 'QUERY:']
+    for prefix in prefixes:
+        if query.upper().startswith(prefix):
+            query = query[len(prefix):].strip()
+    
+    # Ensure SELECT
+    if not query.upper().startswith('SELECT'):
+        query = 'SELECT ' + query
+    
+    # Ensure FROM clause
+    if 'FROM' not in query.upper():
+        query = query + ' FROM data_table'
+    
+    # Fix column names
+    for col in valid_columns:
+        col_pattern = col.replace('_', '[_ ]').replace(' ', '[_ ]')
+        query = re.sub(f'(?i){col_pattern}', col, query)
+    
+    # Add missing semicolon
+    if not query.endswith(';'):
+        query += ';'
+    
+    return query
+
+def extract_columns_from_query(query):
+    """Extract column names from SQL query"""
+    query = query.upper()
+    for keyword in ['FROM', 'WHERE', 'GROUP BY', 'ORDER BY', 'HAVING']:
+        query = query.replace(keyword, ',')
+    words = set(w.strip('"() ') for w in query.split(','))
+    functions = {'SELECT', 'AS', 'AND', 'OR', 'IN', 'MAX', 'MIN', 'AVG', 'SUM', 'COUNT'}
+    return {w for w in words if w and w not in functions}
 
 def is_valid_sql(query):
     """Basic SQL syntax validation"""
     required_elements = ['SELECT', 'FROM']
     query_upper = query.upper()
     
-    # Check for required elements
     if not all(elem in query_upper for elem in required_elements):
         return False
         
-    # Check for balanced parentheses
     if query.count('(') != query.count(')'):
         return False
         
-    # Check for basic SQL injection patterns
     if any(pattern in query_upper for pattern in ['DROP', 'DELETE', 'UPDATE', 'INSERT', '--', ';SELECT']):
         return False
         
@@ -157,7 +217,6 @@ def get_table_schema(df):
 def create_visualization(df, query):
     plt.figure(figsize=(10, 6))
     
-    # Enhanced visualization logic based on query and data types
     if len(df.columns) == 1:
         col = df.columns[0]
         if df[col].dtype in [np.int64, np.float64]:
@@ -187,7 +246,6 @@ def create_visualization(df, query):
     
     plt.tight_layout()
     
-    # Convert plot to base64 string
     buffer = io.BytesIO()
     plt.savefig(buffer, format='png', dpi=300, bbox_inches='tight')
     buffer.seek(0)
@@ -216,13 +274,11 @@ def upload_file():
         temp_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
         file.save(temp_path)
         
-        # Read and analyze the data
         df = pd.read_csv(temp_path)
         
-        # Generate comprehensive statistics
         stats = {
-            'row_count': int(len(df)),  # Convert to native Python int
-            'column_count': int(len(df.columns)),  # Convert to native Python int
+            'row_count': int(len(df)),
+            'column_count': int(len(df.columns)),
             'columns': []
         }
         
@@ -230,12 +286,12 @@ def upload_file():
             col_stats = {
                 'name': str(col),
                 'dtype': str(df[col].dtype),
-                'null_count': int(df[col].isnull().sum()),  # Convert to native Python int
-                'unique_count': int(df[col].nunique())  # Convert to native Python int
+                'null_count': int(df[col].isnull().sum()),
+                'unique_count': int(df[col].nunique())
             }
             if df[col].dtype in ['int64', 'float64']:
                 col_stats.update({
-                    'min': float(df[col].min()),  # Convert to native Python float
+                    'min': float(df[col].min()),
                     'max': float(df[col].max()),
                     'mean': float(df[col].mean()),
                     'median': float(df[col].median())
@@ -250,7 +306,7 @@ def upload_file():
             'schema': table_schema,
             'stats': stats,
             'success': True,
-            'total_rows': int(len(df))  # Add total rows count as native Python int
+            'total_rows': int(len(df))
         })
         
     except Exception as e:
@@ -276,24 +332,19 @@ def process_query():
         if not os.path.exists(file_path):
             return jsonify({'error': 'File not found'})
         
-        # Read the CSV file into a pandas DataFrame
         df = pd.read_csv(file_path)
         logging.info(f"DataFrame columns: {df.columns.tolist()}")
         
-        # Clean column names for SQL compatibility
         df.columns = [col.strip().replace(' ', '_').replace('-', '_') for col in df.columns]
         
-        # Get table schema for the model
         table_schema = get_table_schema(df)
         logging.info(f"Table schema: {table_schema}")
         
         try:
-            # Generate SQL query using the model
-            sql_query = generate_sql_query(query, table_schema)
+            sql_query = generate_sql_query(query, table_schema, df)
             logging.info(f"Generated SQL: {sql_query}")
             
-            # Create a temporary SQLite database
-            engine = create_engine('sqlite:///:memory:', echo=True)  # Enable SQL logging
+            engine = create_engine('sqlite:///:memory:', echo=True)
             
             with engine.connect() as conn:
                 df.to_sql('data_table', conn, index=False, if_exists='replace')
@@ -317,10 +368,8 @@ def process_query():
                 'sql_query': sql_query if 'sql_query' in locals() else 'Query generation failed'
             })
 
-        # Create visualization
         plot_data = create_visualization(result_df, query)
         
-        # Generate summary statistics
         summary_stats = {}
         for col in result_df.select_dtypes(include=[np.number]).columns:
             summary_stats[col] = {
