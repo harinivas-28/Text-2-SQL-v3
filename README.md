@@ -1,4 +1,4 @@
-# Text-to-SQL Converter 🔄
+# Text-to-SQL Converter (Using Flask) 🔄
 
 Convert natural language questions to SQL queries using AI! 🤖
 
