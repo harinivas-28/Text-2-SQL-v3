@@ -10,209 +10,35 @@ import io
 import base64
 import os
 from sqlalchemy import create_engine, text
-import requests
-from urllib.error import URLError
-import json
+import google.generativeai as genai
 from dotenv import load_dotenv
 import re
+from contextlib import contextmanager
 
-load_dotenv()  # Add this near the top of the file, after imports
+# Load environment variables
+load_dotenv()
+
+# Configure Google Generative AI
+GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
+if not GOOGLE_API_KEY:
+    raise ValueError("GOOGLE_API_KEY not found in environment variables")
+genai.configure(api_key=GOOGLE_API_KEY)
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Change model to a better performing one
-API_URL = "https://api-inference.huggingface.co/models/mrm8488/t5-base-finetuned-wikiSQL"
-headers = {"Authorization": f"Bearer {os.getenv('HUGGINGFACE_TOKEN')}"}
+# Create a single engine instance for the application
+engine = create_engine('sqlite:///:memory:', echo=False)
 
-def query_model(payload):
-    """Query the model via Hugging Face API"""
+@contextmanager
+def get_db_connection():
+    """Context manager for database connections"""
+    connection = engine.connect()
     try:
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
-        if response.status_code == 200:
-            return response.json()
-        elif response.status_code == 503:
-            raise Exception("Model is loading, please try again in a few seconds")
-        elif response.status_code == 401:
-            raise Exception("API token is invalid or missing")
-        else:
-            raise Exception(f"API request failed with status code: {response.status_code}")
-    except requests.exceptions.Timeout:
-        raise Exception("Request timed out. Please try again")
-    except requests.exceptions.ConnectionError:
-        raise Exception("Cannot connect to the API. Please check your internet connection")
-    except Exception as e:
-        raise Exception(f"API request failed: {str(e)}")
-
-def create_table_schema_from_df(df):
-    """Create SQL CREATE TABLE statement from DataFrame"""
-    columns = []
-    for col in df.columns:
-        dtype = str(df[col].dtype)
-        if dtype.startswith('int'):
-            sql_type = 'INTEGER'
-        elif dtype.startswith('float'):
-            sql_type = 'REAL'
-        else:
-            sql_type = 'TEXT'
-        columns.append(f'"{col}" {sql_type}')
-    
-    table_name = 'data_table'
-    create_stmt = f'CREATE TABLE {table_name} ({", ".join(columns)})'
-    return create_stmt
-
-def validate_sql_query(query):
-    """Validate and clean SQL query"""
-    query = query.strip()
-    
-    # Remove SQL prefix if present
-    if query.lower().startswith('sql'):
-        query = query[3:].strip()
-
-    # Fix incomplete column names or functions
-    if '_in' in query and not query.endswith('_in'):
-        parts = query.split('_in')
-        if len(parts) > 1:
-            query = parts[0] + '_in_thousands' + parts[1]
-
-    # Add missing GROUP BY clause
-    if 'MAX(' in query or 'MIN(' in query or 'AVG(' in query or 'SUM(' in query:
-        if 'GROUP BY' not in query.upper():
-            non_agg_columns = [col.strip() for col in query[6:query.find('(')].split(',') if col.strip()]
-            if non_agg_columns:
-                query = query.rstrip(';') + ' GROUP BY ' + ', '.join(non_agg_columns) + ';'
-
-    # Remove incomplete clauses
-    if query.endswith(('WHERE', 'GROUP BY', 'ORDER BY', 'HAVING')):
-        query = query.rsplit(' ', 1)[0]
-
-    # Ensure proper query termination
-    if not query.endswith(';'):
-        query = query + ';'
-
-    # Basic syntax validation
-    if not query.upper().startswith('SELECT'):
-        raise ValueError("Invalid SQL query: Must start with SELECT")
-
-    return query
-
-def get_column_details(df):
-    """Get detailed information about columns"""
-    details = []
-    for col in df.columns:
-        dtype = str(df[col].dtype)
-        sample_values = df[col].dropna().head(3).tolist()
-        details.append({
-            'name': col,
-            'type': dtype,
-            'sample_values': sample_values
-        })
-    return details
-
-def generate_sql_query(natural_language_query, table_schema, df):
-    """Generate SQL query using Hugging Face API with enhanced context"""
-    try:
-        # Get sample data and column info
-        sample_data = df.head(3).to_dict('records')
-        column_types = {col: str(dtype) for col, dtype in df.dtypes.items()}
-        
-        # Create a more structured prompt
-        prompt = {
-            "question": natural_language_query,
-            "table_name": "data_table",
-            "columns": list(df.columns),
-            "column_types": column_types,
-            "sample_data": sample_data
-        }
-        
-        # Format the prompt for the model
-        input_text = (
-            f"Convert to SQL: {natural_language_query}\n"
-            f"Table: data_table\n"
-            f"Columns: {', '.join(df.columns)}\n"
-            f"Sample data:\n{pd.DataFrame(sample_data).to_string()}\n"
-            "SQL:"
-        )
-        
-        logging.info(f"Prompt to model:\n{input_text}")
-        
-        # Get SQL from model
-        response = query_model({"inputs": input_text})
-        
-        if isinstance(response, list) and len(response) > 0:
-            sql_query = response[0]['generated_text']
-            logging.info(f"Raw SQL: {sql_query}")
-            
-            # Clean the query
-            sql_query = clean_sql_query(sql_query, df.columns)
-            logging.info(f"Cleaned SQL: {sql_query}")
-            
-            return sql_query
-            
-        raise ValueError("Model returned invalid response")
-        
-    except Exception as e:
-        logging.error(f"SQL generation error: {str(e)}")
-        raise
-
-def clean_sql_query(query, valid_columns):
-    """Clean and validate SQL query"""
-    query = query.strip()
-    
-    # Remove common prefixes
-    prefixes = ['SELECT SQL', 'SQL:', 'SQLITE:', 'QUERY:']
-    for prefix in prefixes:
-        if query.upper().startswith(prefix):
-            query = query[len(prefix):].strip()
-    
-    # Ensure SELECT
-    if not query.upper().startswith('SELECT'):
-        query = 'SELECT ' + query
-    
-    # Ensure FROM clause
-    if 'FROM' not in query.upper():
-        query = query + ' FROM data_table'
-    
-    # Fix column names
-    for col in valid_columns:
-        col_pattern = col.replace('_', '[_ ]').replace(' ', '[_ ]')
-        query = re.sub(f'(?i){col_pattern}', col, query)
-    
-    # Add missing semicolon
-    if not query.endswith(';'):
-        query += ';'
-    
-    return query
-
-def extract_columns_from_query(query):
-    """Extract column names from SQL query"""
-    query = query.upper()
-    for keyword in ['FROM', 'WHERE', 'GROUP BY', 'ORDER BY', 'HAVING']:
-        query = query.replace(keyword, ',')
-    words = set(w.strip('"() ') for w in query.split(','))
-    functions = {'SELECT', 'AS', 'AND', 'OR', 'IN', 'MAX', 'MIN', 'AVG', 'SUM', 'COUNT'}
-    return {w for w in words if w and w not in functions}
-
-def is_valid_sql(query):
-    """Basic SQL syntax validation"""
-    required_elements = ['SELECT', 'FROM']
-    query_upper = query.upper()
-    
-    if not all(elem in query_upper for elem in required_elements):
-        return False
-        
-    if query.count('(') != query.count(')'):
-        return False
-        
-    if any(pattern in query_upper for pattern in ['DROP', 'DELETE', 'UPDATE', 'INSERT', '--', ';SELECT']):
-        return False
-        
-    return True
-
-def get_table_schema(df):
-    """Generate table schema information"""
-    return create_table_schema_from_df(df)
+        yield connection
+    finally:
+        connection.close()
 
 def create_visualization(df, query):
     plt.figure(figsize=(10, 6))
@@ -253,6 +79,46 @@ def create_visualization(df, query):
     plt.close()
     
     return plot_data
+
+def generate_sql_query(natural_language_query, df):
+    """Generate SQL query using Google's Generative AI"""
+    try:
+        # Create a model instance using Gemini 1.5 Pro
+        model = genai.GenerativeModel('models/gemini-1.5-pro')
+        
+        # Prepare a more structured prompt for better SQL generation
+        prompt = f"""You are an SQL expert. Generate a SQL query for the following request.
+
+        Table Information:
+        Table name: data_table
+        Columns: {', '.join(df.columns)}
+        Sample data first row: {df.iloc[0].to_dict()}
+        
+        User Request: {natural_language_query}
+        
+        Important Instructions:
+        1. Return ONLY the SQL query, no explanations
+        2. Use proper column names exactly as provided
+        3. Always use the table name 'data_table'
+        4. Use standard SQL syntax compatible with SQLite
+        
+        SQL Query:"""
+        
+        # Generate the response
+        response = model.generate_content(prompt)
+        sql_query = response.text.strip()
+        
+        # Basic validation that it's a SQL query
+        if not any(keyword in sql_query.upper() for keyword in ['SELECT', 'INSERT', 'UPDATE', 'DELETE']):
+            raise ValueError("Generated text is not a valid SQL query")
+        
+        # Clean up the query if needed
+        sql_query = sql_query.replace('```sql', '').replace('```', '').strip()
+            
+        return sql_query
+    except Exception as e:
+        logging.error(f"Error generating SQL query: {str(e)}")
+        raise
 
 @app.route('/')
 def index():
@@ -299,11 +165,9 @@ def upload_file():
             stats['columns'].append(col_stats)
         
         preview_html = df.to_html(classes='table table-striped', index=False)
-        table_schema = get_table_schema(df)
         
         return jsonify({
             'preview': preview_html,
-            'schema': table_schema,
             'stats': stats,
             'success': True,
             'total_rows': int(len(df))
@@ -337,19 +201,18 @@ def process_query():
         
         df.columns = [col.strip().replace(' ', '_').replace('-', '_') for col in df.columns]
         
-        table_schema = get_table_schema(df)
-        logging.info(f"Table schema: {table_schema}")
-        
         try:
-            sql_query = generate_sql_query(query, table_schema, df)
+            sql_query = generate_sql_query(query, df)
             logging.info(f"Generated SQL: {sql_query}")
             
-            engine = create_engine('sqlite:///:memory:', echo=True)
-            
-            with engine.connect() as conn:
+            with get_db_connection() as conn:
+                # Create or replace the table
                 df.to_sql('data_table', conn, index=False, if_exists='replace')
+                
                 try:
-                    result_df = pd.read_sql_query(sql_query, conn)
+                    # Execute the query within a transaction
+                    with conn.begin():
+                        result_df = pd.read_sql_query(sql_query, conn)
                 except Exception as sql_error:
                     logging.error(f"SQL execution error: {str(sql_error)}")
                     logging.error(f"Failed query: {sql_query}")
@@ -361,33 +224,34 @@ def process_query():
                         'sql_query': sql_query
                     })
                 
+                plot_data = create_visualization(result_df, query)
+                
+                summary_stats = {}
+                for col in result_df.select_dtypes(include=[np.number]).columns:
+                    stats = {
+                        'mean': float(result_df[col].mean()) if not pd.isna(result_df[col].mean()) else None,
+                        'median': float(result_df[col].median()) if not pd.isna(result_df[col].median()) else None,
+                        'std': float(result_df[col].std()) if not pd.isna(result_df[col].std()) else None,
+                        'min': float(result_df[col].min()) if not pd.isna(result_df[col].min()) else None,
+                        'max': float(result_df[col].max()) if not pd.isna(result_df[col].max()) else None
+                    }
+                    summary_stats[col] = {k: v for k, v in stats.items() if v is not None}
+                
+                return jsonify({
+                    'result': result_df.to_dict('records'),
+                    'sql_query': sql_query,
+                    'plot': plot_data,
+                    'summary': summary_stats,
+                    'columns': list(result_df.columns)
+                })
+                
         except Exception as e:
             logging.error(f"Error executing SQL query: {str(e)}")
             return jsonify({
                 'error': f'Error executing SQL query: {str(e)}',
                 'sql_query': sql_query if 'sql_query' in locals() else 'Query generation failed'
             })
-
-        plot_data = create_visualization(result_df, query)
-        
-        summary_stats = {}
-        for col in result_df.select_dtypes(include=[np.number]).columns:
-            summary_stats[col] = {
-                'mean': result_df[col].mean(),
-                'median': result_df[col].median(),
-                'std': result_df[col].std(),
-                'min': result_df[col].min(),
-                'max': result_df[col].max()
-            }
-        
-        return jsonify({
-            'result': result_df.to_dict('records'),
-            'sql_query': sql_query,
-            'plot': plot_data,
-            'summary': summary_stats,
-            'columns': list(result_df.columns)
-        })
-        
+            
     except Exception as e:
         logging.error(f"Error processing query: {str(e)}")
         return jsonify({'error': str(e)})

@@ -226,6 +226,24 @@
                     link.parentElement.classList.add('active');
                 }
             });
+
+            // Set SQL checkbox to checked by default
+            const showSQLCheckbox = document.getElementById('showSQL');
+            if (showSQLCheckbox) {
+                showSQLCheckbox.checked = true;
+            }
+
+            // Add global error handler
+            window.addEventListener('error', function(event) {
+                console.error('Global error:', event.error);
+                event.preventDefault(); // Prevent default browser error alert
+            });
+
+            // Add global promise rejection handler
+            window.addEventListener('unhandledrejection', function(event) {
+                console.error('Unhandled promise rejection:', event.reason);
+                event.preventDefault(); // Prevent default browser error alert
+            });
         });
     </script>
 </body>

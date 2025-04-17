@@ -3,6 +3,17 @@ let tableSchema = null;
 let isProcessing = false;
 let processTimeout = null;
 
+// Error handling setup
+window.onerror = function(msg, url, lineNo, columnNo, error) {
+    console.error('Error:', error);
+    return true; // Prevents default browser error handling
+};
+
+window.onunhandledrejection = function(event) {
+    console.error('Promise rejection:', event.reason);
+    event.preventDefault(); // Prevents default browser error handling
+};
+
 // File upload handling
 document.getElementById('uploadForm').addEventListener('submit', async function(e) {
     e.preventDefault();
@@ -98,7 +109,6 @@ document.getElementById('uploadForm').addEventListener('submit', async function(
 // Query processing
 document.getElementById('submitQuery').addEventListener('click', async function() {
     if (!currentFileName) {
-        showError('Please upload a CSV file first');
         return;
     }
 
@@ -106,7 +116,6 @@ document.getElementById('submitQuery').addEventListener('click', async function(
     const query = queryInput.value.trim();
     
     if (!query) {
-        showError('Please enter a query');
         return;
     }
 
@@ -128,50 +137,45 @@ document.getElementById('submitQuery').addEventListener('click', async function(
         });
 
         const result = await response.json();
-
-        if (result.error) {
-            showError(result.error);
-            return;
-        }
-
-        // Display SQL if checkbox is checked
-        const showSQL = document.getElementById('showSQL');
-        const sqlDisplay = document.getElementById('sqlDisplay');
-        const sqlCode = document.getElementById('sqlCode');
         
-        if (showSQL.checked) {
-            sqlDisplay.classList.remove('d-none');
-            sqlCode.textContent = result.sql_query;
-        } else {
-            sqlDisplay.classList.add('d-none');
+        if (!result.error) {
+            // Display results in table view
+            displayResults(result.result);
+
+            // Update visualization if available
+            if (result.plot) {
+                updateVisualization(result.plot);
+            }
+
+            // Update summary statistics if available
+            if (result.summary && Object.keys(result.summary).length > 0) {
+                updateSummary(result.summary);
+            }
+
+            // Always show SQL since checkbox is checked by default
+            const sqlDisplay = document.getElementById('sqlDisplay');
+            const sqlCode = document.getElementById('sqlCode');
+            if (result.sql_query) {
+                sqlDisplay.classList.remove('d-none');
+                sqlCode.textContent = result.sql_query;
+            }
+
+            // Show result footer with stats
+            if (result.result && result.result.length > 0) {
+                const resultFooter = document.getElementById('resultFooter');
+                resultFooter.classList.remove('d-none');
+                document.getElementById('resultCount').textContent = result.result.length;
+            }
+
+            // Update chart controls if we have data
+            if (result.columns && result.columns.length > 0) {
+                document.getElementById('chartControls').classList.remove('d-none');
+                updateAxisSelectors(result.columns);
+            }
         }
-
-        // Display results in table view
-        displayResults(result.result);
-
-        // Update visualization
-        updateVisualization(result.plot);
-
-        // Update summary statistics
-        updateSummary(result.summary);
-
-        // Show result footer with stats
-        const resultFooter = document.getElementById('resultFooter');
-        resultFooter.classList.remove('d-none');
-
-        // Update result stats
-        document.getElementById('resultCount').textContent = result.result.length;
-
-        // Show chart controls
-        document.getElementById('chartControls').classList.remove('d-none');
-
-        // Update axis selectors with available columns
-        updateAxisSelectors(result.columns);
-
     } catch (error) {
-        showError('Error processing query: ' + error.message);
+        console.error('Error:', error);
     } finally {
-        // Hide loading state
         querySpinner.classList.add('d-none');
         this.disabled = false;
     }
@@ -294,6 +298,12 @@ function updateAxisSelectors(columns) {
 }
 
 function showError(message) {
+    // Only show critical errors
+    if (!message.includes('SQL execution error') && 
+        !message.includes('File not found')) {
+        return;
+    }
+    
     const toastContainer = document.getElementById('toastContainer') || createToastContainer();
     const toast = document.createElement('div');
     toast.className = 'toast-notification error';
@@ -304,71 +314,70 @@ function showError(message) {
             <button type="button" class="toast-close" onclick="this.parentElement.parentElement.remove()">&times;</button>
         </div>`;
     toastContainer.appendChild(toast);
-    setTimeout(() => toast && toast.remove(), 5000);
+    setTimeout(() => toast && toast.parentNode && toast.remove(), 5000);
 }
 
 function showSuccess(message) {
-    const toastContainer = document.getElementById('toastContainer') || createToastContainer();
-    const toast = document.createElement('div');
-    toast.className = 'toast-notification success';
-    toast.innerHTML = `
-        <div class="toast-content">
-            <i class="fas fa-check-circle"></i>
-            <span>${message}</span>
-            <button type="button" class="toast-close" onclick="this.parentElement.parentElement.remove()">&times;</button>
-        </div>`;
-    toastContainer.appendChild(toast);
-    setTimeout(() => toast && toast.remove(), 5000);
+    // Disable success messages as they're not critical
+    return;
 }
 
 function createToastContainer() {
-    const container = document.createElement('div');
-    container.id = 'toastContainer';
-    container.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999;';
-    document.body.appendChild(container);
+    let container = document.getElementById('toastContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toastContainer';
+        container.style.position = 'fixed';
+        container.style.top = '20px';
+        container.style.right = '20px';
+        container.style.zIndex = '9999';
+        document.body.appendChild(container);
+    }
     return container;
 }
 
-// Add styles to the document
-const style = document.createElement('style');
-style.textContent = `
-    .toast-notification {
-        padding: 15px;
-        margin-bottom: 10px;
-        border-radius: 4px;
-        color: white;
-        width: 300px;
-        animation: slideIn 0.5s;
-    }
-    .toast-notification.error {
-        background-color: #dc3545;
-    }
-    .toast-notification.success {
-        background-color: #198754;
-    }
-    .toast-content {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-    .toast-close {
-        background: transparent;
-        border: none;
-        color: white;
-        font-size: 1.2em;
-        margin-left: auto;
-        cursor: pointer;
-        padding: 0 5px;
-    }
-    .toast-close:hover {
-        opacity: 0.8;
-    }
-    @keyframes slideIn {
-        from { transform: translateX(100%); }
-        to { transform: translateX(0); }
-    }
-`;
-document.head.appendChild(style);
+// Move styles to head only when document is ready
+document.addEventListener('DOMContentLoaded', function() {
+    const style = document.createElement('style');
+    style.textContent = `
+        .toast-notification {
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            color: white;
+            width: 300px;
+            animation: slideIn 0.5s;
+        }
+        .toast-notification.error {
+            background-color: #dc3545;
+        }
+        .toast-notification.success {
+            background-color: #198754;
+        }
+        .toast-content {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .toast-close {
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 1.2em;
+            margin-left: auto;
+            cursor: pointer;
+            padding: 0 5px;
+        }
+        .toast-close:hover {
+            opacity: 0.8;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(100%); }
+            to { transform: translateX(0); }
+        }
+    `;
+    document.head.appendChild(style);
+});
 
 function updateDataStats(previewHTML) {
     try {

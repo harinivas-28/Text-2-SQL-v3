@@ -1,6 +1,6 @@
 # Text-to-SQL Converter (Using Flask) 🔄
 
-Convert natural language questions to SQL queries using AI! 🤖
+Convert natural language questions to SQL queries using Google's Generative AI! 🤖
 
 ## 📁 Project Structure
 
@@ -21,7 +21,7 @@ Text-2-SQL-v3/
 ## ✨ Features
 
 - 📊 Upload and analyze CSV files
-- 💬 Natural language to SQL conversion
+- 💬 Natural language to SQL conversion using Google's Generative AI
 - 📈 Automatic data visualization
 - 📑 Statistical summaries
 - 🎯 Interactive query examples
@@ -34,6 +34,19 @@ Text-2-SQL-v3/
 - Python 3.8 or higher
 - pip (Python package manager)
 - Git
+- Google API key for Generative AI
+
+### Set Up Google API Key
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Enable the Generative Language API
+4. Create credentials (API key) for the Generative Language API
+5. Copy your API key
+6. Add it to the `.env` file:
+   ```
+   GOOGLE_API_KEY=your_google_api_key_here
+   ```
 
 ### Clone the Repository
 
@@ -77,7 +90,7 @@ Visit `http://localhost:5000` in your web browser 🌐
 ## 🔧 Technical Details
 
 - **Backend**: Flask (Python)
-- **ML Model**: T5 Transformer for text-to-SQL conversion
+- **AI Model**: Google Generative AI (Gemini) for text-to-SQL conversion
 - **Frontend**: HTML5, CSS3, JavaScript
 - **Data Processing**: Pandas, NumPy
 - **Visualization**: Matplotlib, Seaborn
@@ -109,6 +122,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## 🙏 Acknowledgments
 
-- Hugging Face for the T5 model
+- Google for the Generative AI API
 - Flask team for the web framework
 - Open source community for various libraries

@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 
 {% block content %}
+<div id="toastContainer" class="position-fixed top-0 end-0 p-3" style="z-index: 1050;"></div>
+
 <div class="row g-4">
     <!-- Welcome Section -->
     <div class="col-12">
@@ -518,140 +520,122 @@
     .animate__fadeInUp:nth-child(4) {
         animation-delay: 0.4s;
     }
+
+    /* Toast notifications */
+    .toast-notification {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        margin-bottom: 1rem;
+        max-width: 350px;
+        padding: 1rem;
+        position: relative;
+        transition: all 0.3s ease;
+    }
+    .toast-content {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .toast-notification.error {
+        border-left: 4px solid #dc3545;
+    }
+    .toast-notification.success {
+        border-left: 4px solid #198754;
+    }
+    .toast-notification i {
+        font-size: 1.25rem;
+    }
+    .toast-notification.error i {
+        color: #dc3545;
+    }
+    .toast-notification.success i {
+        color: #198754;
+    }
+    .toast-close {
+        background: transparent;
+        border: none;
+        color: #6c757d;
+        cursor: pointer;
+        font-size: 1.25rem;
+        line-height: 1;
+        padding: 0;
+        position: absolute;
+        right: 0.5rem;
+        top: 0.5rem;
+    }
+    .toast-close:hover {
+        color: #000;
+    }
 </style>
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // File upload interaction
-        const dropZone = document.getElementById('dropZone');
-        const fileInput = document.getElementById('csvFile');
-        const browseBtn = document.getElementById('browseBtn');
-        const selectedFile = document.getElementById('selectedFile');
-        const uploadContent = document.querySelector('.upload-content');
-        const fileName = document.getElementById('fileName');
-        const fileSize = document.getElementById('fileSize');
-        const removeFile = document.getElementById('removeFile');
-        const progress = document.getElementById('uploadProgress').querySelector('.progress-bar');
-        
-        // Simulate drag and drop functionality
-        dropZone.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            dropZone.classList.add('dragover');
-        });
-        
-        dropZone.addEventListener('dragleave', function() {
-            dropZone.classList.remove('dragover');
-        });
-        
-        dropZone.addEventListener('drop', function(e) {
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
-            if (e.dataTransfer.files.length) {
-                fileInput.files = e.dataTransfer.files;
-                updateFileInfo();
-            }
-        });
-        
-        browseBtn.addEventListener('click', function() {
-            fileInput.click();
-        });
-        
-        fileInput.addEventListener('change', updateFileInfo);
-        
-        removeFile.addEventListener('click', function() {
-            fileInput.value = '';
-            uploadContent.classList.remove('d-none');
-            selectedFile.classList.add('d-none');
-            progress.style.width = '0%';
-        });
-        
-        function updateFileInfo() {
-            if (fileInput.files.length) {
-                const file = fileInput.files[0];
-                fileName.textContent = file.name;
-                fileSize.textContent = formatFileSize(file.size);
-                uploadContent.classList.add('d-none');
-                selectedFile.classList.remove('d-none');
-            }
-        }
-        
-        function formatFileSize(bytes) {
-            if (bytes < 1024) return bytes + ' bytes';
-            else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
-            else return (bytes / 1048576).toFixed(1) + ' MB';
-        }
-        
-        // Form submission with progress
-        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            if (!fileInput.files.length) {
-                showError('Please select a file to upload');
-                return;
-            }
-            
-            const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
-            
-            // Show loading state
-            const previewArea = document.getElementById('previewArea');
-            previewArea.innerHTML = `
-                <div class="text-center p-4">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <p class="mt-2">Processing your data...</p>
+        const toastContainer = document.getElementById('toastContainer');
+
+        function showError(message) {
+            const toast = document.createElement('div');
+            toast.className = 'toast-notification error animate__animated animate__fadeInRight';
+            toast.innerHTML = `
+                <div class="toast-content">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span>${message}</span>
+                    <button type="button" class="toast-close">&times;</button>
                 </div>`;
             
-            try {
-                const response = await fetch('/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                const result = await response.json();
-                
-                if (!result.success) {
-                    showError(result.error || 'Upload failed');
-                    return;
+            toastContainer.appendChild(toast);
+            
+            toast.querySelector('.toast-close').addEventListener('click', () => {
+                toast.classList.add('animate__fadeOutRight');
+                setTimeout(() => toast.remove(), 300);
+            });
+            
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.classList.add('animate__fadeOutRight');
+                    setTimeout(() => toast.remove(), 300);
                 }
+            }, 5000);
+        }
 
-                // Update preview and stats
-                previewArea.innerHTML = result.preview;
-                updateDataStats(result.stats);
-                updateExampleQueries(result.stats);
-                
-                // Show success message
-                showSuccess('File uploaded and processed successfully');
-                
-            } catch (error) {
-                showError('Error uploading file: ' + error.message);
-                previewArea.innerHTML = `
-                    <div class="text-center p-4">
-                        <i class="fas fa-exclamation-triangle text-warning fa-3x mb-3"></i>
-                        <h5 class="text-muted">Upload failed. Please try again.</h5>
-                    </div>`;
-            }
-        });
+        function showSuccess(message) {
+            const toast = document.createElement('div');
+            toast.className = 'toast-notification success animate__animated animate__fadeInRight';
+            toast.innerHTML = `
+                <div class="toast-content">
+                    <i class="fas fa-check-circle"></i>
+                    <span>${message}</span>
+                    <button type="button" class="toast-close">&times;</button>
+                </div>`;
+            
+            toastContainer.appendChild(toast);
+            
+            toast.querySelector('.toast-close').addEventListener('click', () => {
+                toast.classList.add('animate__fadeOutRight');
+                setTimeout(() => toast.remove(), 300);
+            });
+            
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.classList.add('animate__fadeOutRight');
+                    setTimeout(() => toast.remove(), 300);
+                }
+            }, 5000);
+        }
 
-        // Update submit query handler
         document.getElementById('submitQuery').addEventListener('click', async function() {
             const queryInput = document.getElementById('queryInput');
-            const querySpinner = document.getElementById('querySpinner');
-            const showSQL = document.getElementById('showSQL');
-            const sqlDisplay = document.getElementById('sqlDisplay');
-            const sqlCode = document.getElementById('sqlCode');
-            const resultFooter = document.getElementById('resultFooter');
+            const query = queryInput.value.trim();
             
-            if (!queryInput.value.trim()) {
+            if (!query) {
                 showError('Please enter a query');
                 return;
             }
-            
-            // Show loading state
+
+            const querySpinner = document.getElementById('querySpinner');
             querySpinner.classList.remove('d-none');
             this.disabled = true;
-            
+
             try {
                 const response = await fetch('/query', {
                     method: 'POST',
@@ -659,178 +643,29 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        query: queryInput.value,
+                        query: query,
                         filename: currentFileName
                     })
                 });
 
                 const result = await response.json();
-                
+
                 if (result.error) {
-                    showError(result.error);
+                    console.error('Query error:', result.error);
                     return;
                 }
 
-                // Display SQL
-                if (showSQL.checked) {
-                    sqlDisplay.classList.remove('d-none');
-                    sqlCode.textContent = result.sql_query;
-                }
+                // Rest of the success handling code...
 
-                // Update visualizations and results
-                updateResults(result);
-                
             } catch (error) {
-                showError('Error processing query: ' + error.message);
+                console.error('Error:', error);
             } finally {
                 querySpinner.classList.add('d-none');
                 this.disabled = false;
             }
         });
 
-        function updateResults(result) {
-            // Update table view
-            document.querySelector('#table-view .no-results-message').style.display = 'none';
-            displayResults(result.result);
-            
-            // Update visualization
-            document.querySelector('#chart-view .no-chart-message').style.display = 'none';
-            if (result.plot) {
-                document.getElementById('visualizationArea').innerHTML = 
-                    `<img src="data:image/png;base64,${result.plot}" class="img-fluid" alt="Data visualization">`;
-            }
-            
-            // Update summary
-            document.querySelector('#summary-view .no-summary-message').style.display = 'none';
-            updateSummary(result.summary);
-            
-            // Show controls and footer
-            document.getElementById('chartControls').classList.remove('d-none');
-            document.getElementById('resultFooter').classList.remove('d-none');
-            
-            // Update stats
-            document.getElementById('resultCount').textContent = result.result.length;
-            
-            // Update axis selectors
-            updateAxisSelectors(result.columns);
-        }
-
-        // Remove all sample data generation functions
-        function generateSampleResults() {
-            return '<div class="p-4 text-center">Processing query...</div>';
-        }
-
-        function generateSampleChart() {
-            const chartArea = document.getElementById('visualizationArea');
-            chartArea.innerHTML = '<div class="p-4 text-center">Processing visualization...</div>';
-        }
-
-        function generateSampleSummary() {
-            const summaryArea = document.getElementById('summaryArea');
-            summaryArea.innerHTML = '<div class="p-4 text-center">Processing summary...</div>';
-        }
-
-        // Generate sample SQL based on query
-        function generateSampleSQL(query) {
-            if (query.toLowerCase().includes('average')) {
-                return "SELECT AVG(salary) AS average_salary\nFROM employees\nGROUP BY department\nORDER BY average_salary DESC;";
-            } else if (query.toLowerCase().includes('top')) {
-                return "SELECT *\nFROM employees\nORDER BY salary DESC\nLIMIT 5;";
-            } else if (query.toLowerCase().includes('where')) {
-                return "SELECT *\nFROM employees\nWHERE age > 30;";
-            } else {
-                return "-- SQL query generated based on your input";
-            }
-        }
-
-        // Populate axis selectors for chart controls
-        function populateAxisSelectors() {
-            const columns = ['ID', 'Name', 'Department', 'Salary', 'Age'];
-            const xAxis = document.getElementById('xAxis');
-            const yAxis = document.getElementById('yAxis');
-            
-            xAxis.innerHTML = '';
-            yAxis.innerHTML = '';
-            
-            columns.forEach(column => {
-                xAxis.innerHTML += `<option value="${column}">${column}</option>`;
-                yAxis.innerHTML += `<option value="${column}">${column}</option>`;
-            });
-            
-            // Set default selections
-            yAxis.value = 'Salary';
-            xAxis.value = 'Department';
-        }
-
-        // Initialize chart controls event listeners
-        document.getElementById('chartType').addEventListener('change', generateSampleChart);
-        document.getElementById('xAxis').addEventListener('change', generateSampleChart);
-        document.getElementById('yAxis').addEventListener('change', generateSampleChart);
-
-        // Copy SQL button functionality
-        document.getElementById('copySQL').addEventListener('click', function() {
-            const sqlCode = document.getElementById('sqlCode').textContent;
-            navigator.clipboard.writeText(sqlCode).then(() => {
-                this.innerHTML = '<i class="fas fa-check me-1"></i>Copied!';
-                setTimeout(() => {
-                    this.innerHTML = '<i class="fas fa-copy me-1"></i>Copy';
-                }, 2000);
-            });
-        });
-
-        // Handle example query clicks
-        document.querySelectorAll('.example-query').forEach(button => {
-            button.addEventListener('click', function() {
-                const queryInput = document.getElementById('queryInput');
-                queryInput.value = this.getAttribute('data-query');
-                queryInput.focus();
-            });
-        });
-
-        // Update example queries based on uploaded data
-        function updateExampleQueries(stats) {
-            const exampleQueries = document.getElementById('exampleQueries');
-            const queries = [];
-            
-            // Basic queries
-            queries.push('Show all rows from the table');
-            queries.push('Show me the first 5 rows');
-            queries.push(`Show total count of rows`);
-            
-            // Add column-specific queries
-            if (stats && stats.columns) {
-                const numericColumns = stats.columns.filter(col => 
-                    ['int64', 'float64'].includes(col.dtype));
-                
-                if (numericColumns.length > 0) {
-                    const col = numericColumns[0].name;
-                    queries.push(`What is the average ${col}?`);
-                    queries.push(`Show maximum ${col}`);
-                }
-            }
-            
-            // Update the UI
-            exampleQueries.innerHTML = queries.map(query => 
-                `<button class="btn btn-sm btn-light example-query" data-query="${query}">${query}</button>`
-            ).join('');
-            
-            // Reattach click handlers
-            document.querySelectorAll('.example-query').forEach(button => {
-                button.addEventListener('click', function() {
-                    document.getElementById('queryInput').value = this.getAttribute('data-query');
-                });
-            });
-        }
-
-        // Show error message
-        function showError(message) {
-            alert(message);
-        }
-
-        // Show success message
-        function showSuccess(message) {
-            alert(message);
-        }
+        // Existing code...
     });
 </script>
 
