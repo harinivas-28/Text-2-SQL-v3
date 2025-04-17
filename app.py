@@ -84,41 +84,61 @@ def generate_sql_query(natural_language_query, df):
     """Generate SQL query using Google's Generative AI"""
     try:
         # Create a model instance using Gemini 1.5 Pro
-        model = genai.GenerativeModel('models/gemini-1.5-pro')
+        models = [
+            'models/gemini-1.5-pro',
+            'models/gemini-1.0-pro', 
+            'models/gemini-1.0',
+            'models/gemini-1.5',
+            'models/gemini-1.5-beta'
+        ]
+        last_error = None
+        for model_name in models:
+            try:
+                model = genai.GenerativeModel(model_name)
         
-        # Prepare a more structured prompt for better SQL generation
-        prompt = f"""You are an SQL expert. Generate a SQL query for the following request.
+                # Prepare a more structured prompt for better SQL generation
+                prompt = f"""You are an SQL expert. Generate a SQL query for the following request.
 
-        Table Information:
-        Table name: data_table
-        Columns: {', '.join(df.columns)}
-        Sample data first row: {df.iloc[0].to_dict()}
+                Table Information:
+                Table name: data_table
+                Columns: {', '.join(df.columns)}
+                Sample data first row: {df.iloc[0].to_dict()}
+                
+                User Request: {natural_language_query}
+                
+                Important Instructions:
+                1. Return ONLY the SQL query, no explanations
+                2. Use proper column names exactly as provided
+                3. Always use the table name 'data_table'
+                4. Use standard SQL syntax compatible with SQLite
+                
+                SQL Query:"""
+                
+                # Generate the response
+                response = model.generate_content(prompt)
+                sql_query = response.text.strip()
         
-        User Request: {natural_language_query}
-        
-        Important Instructions:
-        1. Return ONLY the SQL query, no explanations
-        2. Use proper column names exactly as provided
-        3. Always use the table name 'data_table'
-        4. Use standard SQL syntax compatible with SQLite
-        
-        SQL Query:"""
-        
-        # Generate the response
-        response = model.generate_content(prompt)
-        sql_query = response.text.strip()
-        
-        # Basic validation that it's a SQL query
-        if not any(keyword in sql_query.upper() for keyword in ['SELECT', 'INSERT', 'UPDATE', 'DELETE']):
-            raise ValueError("Generated text is not a valid SQL query")
-        
-        # Clean up the query if needed
-        sql_query = sql_query.replace('```sql', '').replace('```', '').strip()
-            
-        return sql_query
+                # Basic validation that it's a SQL query
+                if not any(keyword in sql_query.upper() for keyword in ['SELECT', 'INSERT', 'UPDATE', 'DELETE']):
+                    raise ValueError("Generated text is not a valid SQL query")
+                
+                # Clean up the query if needed
+                sql_query = sql_query.replace('```sql', '').replace('```', '').strip()
+                    
+                return sql_query
+            except Exception as e:
+                last_error = e
+                logging.warning(f"Failed with model {model_name}: {str(e)}")
+                continue
+            logging.error(f"All models failed: {str(last_error)}")
+            raise ValueError("Error generating SQL Query - all models failed")
     except Exception as e:
         logging.error(f"Error generating SQL query: {str(e)}")
+        # Check if it's a rate limit error (429)
+        if "429" in str(e) and "quota" in str(e):
+            raise ValueError("Error generating SQL Query - code-1.5")
         raise
+    
 
 @app.route('/')
 def index():
@@ -244,7 +264,15 @@ def process_query():
                     'summary': summary_stats,
                     'columns': list(result_df.columns)
                 })
-                
+        except ValueError as ve:
+            # Handle the specific error we raised
+            if "Error generating SQL Query - code-1.5" in str(ve):
+                return jsonify({
+                    'error': 'Error generating SQL Query - code-1.5'
+                })
+            return jsonify({
+                'error': str(ve)
+            })  
         except Exception as e:
             logging.error(f"Error executing SQL query: {str(e)}")
             return jsonify({

@@ -43,111 +43,194 @@ function formatFileSize(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-// File upload handling
-document.getElementById('uploadForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    
-    if (isProcessing) {
-        showError('Please wait, a file is being processed');
-        return; // Prevent multiple submissions
-    }
-    
-    // Clear any existing timeout
-    if (processTimeout) {
-        clearTimeout(processTimeout);
-    }
-
-    isProcessing = true;
-    const fileInput = document.getElementById('csvFile');
-    const submitButton = document.getElementById('submitQuery');
-    const previewArea = document.getElementById('previewArea');
-    const uploadProgress = document.getElementById('uploadProgress').querySelector('.progress-bar');
-    
-    if (!fileInput.files.length) {
-        showError('Please select a file to upload');
-        isProcessing = false;
-        return;
-    }
-
-    // Clear previous results and disable query
-    submitButton.disabled = true;
-    document.getElementById('queryResult').innerHTML = '';
-    document.getElementById('visualizationArea').innerHTML = '';
-    document.getElementById('summaryArea').innerHTML = '';
-    document.getElementById('sqlDisplay').classList.add('d-none');
-    document.getElementById('resultFooter').classList.add('d-none');
-    document.getElementById('chartControls').classList.add('d-none');
-    
-    // Show loading state in preview area
-    previewArea.innerHTML = `
-        <div class="text-center p-4">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-            <p class="mt-2">Loading your data...</p>
-        </div>`;
-
-    // Simulate upload progress
-    let progress = 0;
-    const progressInterval = setInterval(() => {
-        progress += 5;
-        if (progress <= 90) {
-            uploadProgress.style.width = progress + '%';
-        }
-    }, 100);
-
-    const file = fileInput.files[0];
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-        const response = await fetch('/upload', {
-            method: 'POST',
-            body: formData
-        });
-
-        clearInterval(progressInterval);
-        uploadProgress.style.width = '100%';
-
-        const result = await response.json();
+    // File upload handling
+    document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
         
-        if (result.error) {
-            showError(result.error);
-            currentFileName = null;
-            tableSchema = null;
+        if (isProcessing) {
+            showError('Please wait, a file is being processed');
+            return; // Prevent multiple submissions
+        }
+        
+        // Clear any existing timeout
+        if (processTimeout) {
+            clearTimeout(processTimeout);
+        }
+
+        isProcessing = true;
+        const fileInput = document.getElementById('csvFile');
+        const submitButton = document.getElementById('submitQuery');
+        const previewArea = document.getElementById('previewArea');
+        const uploadProgress = document.getElementById('uploadProgress').querySelector('.progress-bar');
+        
+        if (!fileInput.files.length) {
+            showError('Please select a file to upload');
+            isProcessing = false;
             return;
         }
-
-        // Ensure any previous data is cleared
+        document.getElementById('copySQL').addEventListener('click', function() {
+            const sqlCode = document.getElementById('sqlCode').textContent;
+            navigator.clipboard.writeText(sqlCode).then(() => {
+                showSuccess('SQL query copied to clipboard');
+            }).catch(err => {
+                showError('Failed to copy: ' + err);
+            });
+        });
+        // Clear previous results and disable query
+        submitButton.disabled = true;
         document.getElementById('queryResult').innerHTML = '';
         document.getElementById('visualizationArea').innerHTML = '';
         document.getElementById('summaryArea').innerHTML = '';
+        document.getElementById('sqlDisplay').classList.add('d-none');
+        document.getElementById('resultFooter').classList.add('d-none');
+        document.getElementById('chartControls').classList.add('d-none');
+        // Drag and drop handling for the upload zone
+        const dropZone = document.getElementById('dropZone');
+        const browseBtn = document.getElementById('browseBtn');
+        const removeFileBtn = document.getElementById('removeFile');
 
-        // Reset previous data
-        currentFileName = file.name;
-        tableSchema = result.schema;
+        browseBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
 
-        // Update the preview area with the full data
-        previewArea.innerHTML = result.preview;
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                showSelectedFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        removeFileBtn.addEventListener('click', () => {
+            fileInput.value = '';
+            document.getElementById('selectedFile').classList.add('d-none');
+        });
+        // Add chart control event listeners
+        document.getElementById('chartType').addEventListener('change', updateChart);
+        document.getElementById('xAxis').addEventListener('change', updateChart);
+        document.getElementById('yAxis').addEventListener('change', updateChart);
+
+        // Function to update chart based on control changes
+        async function updateChart() {
+            if (!currentFileName) return;
+            
+            const chartType = document.getElementById('chartType').value;
+            const xAxis = document.getElementById('xAxis').value;
+            const yAxis = document.getElementById('yAxis').value;
+            
+            if (!chartType || !xAxis || !yAxis) return;
+            
+            try {
+                const response = await fetch('/update_chart', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        filename: currentFileName,
+                        chart_type: chartType,
+                        x_axis: xAxis,
+                        y_axis: yAxis
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.error) {
+                    showError(result.error);
+                    return;
+                }
+                
+                if (result.plot) {
+                    updateVisualization(result.plot);
+                }
+            } catch (error) {
+                console.error('Error updating chart:', error);
+                showError('Failed to update chart: ' + error.message);
+            }
+        }
         
-        // Show data stats with total rows
-        const dataStats = document.getElementById('dataStats');
-        dataStats.classList.remove('d-none');
-        document.getElementById('rowCount').textContent = result.total_rows;
-        document.getElementById('colCount').textContent = document.querySelectorAll('#previewArea th').length;
+        // Show loading state in preview area
+        previewArea.innerHTML = `
+            <div class="text-center p-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2">Loading your data...</p>
+            </div>`;
 
-        // Generate example queries based on columns
-        generateExampleQueries(result.stats.columns);
-        
-    } catch (error) {
-        showError('Error uploading file: ' + error.message);
-        currentFileName = null;
-        tableSchema = null;
-    } finally {
-        isProcessing = false;
-        submitButton.disabled = false;
-    }
-});
+        // Simulate upload progress
+        let progress = 0;
+        const progressInterval = setInterval(() => {
+            progress += 5;
+            if (progress <= 90) {
+                uploadProgress.style.width = progress + '%';
+            }
+        }, 100);
+
+        const file = fileInput.files[0];
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const response = await fetch('/upload', {
+                method: 'POST',
+                body: formData
+            });
+
+            clearInterval(progressInterval);
+            uploadProgress.style.width = '100%';
+
+            const result = await response.json();
+            
+            if (result.error) {
+                showError(result.error);
+                currentFileName = null;
+                tableSchema = null;
+                return;
+            }
+
+            // Ensure any previous data is cleared
+            document.getElementById('queryResult').innerHTML = '';
+            document.getElementById('visualizationArea').innerHTML = '';
+            document.getElementById('summaryArea').innerHTML = '';
+
+            // Reset previous data
+            currentFileName = file.name;
+            tableSchema = result.schema;
+
+            // Update the preview area with the full data
+            previewArea.innerHTML = result.preview;
+            
+            // Show data stats with total rows
+            const dataStats = document.getElementById('dataStats');
+            dataStats.classList.remove('d-none');
+            document.getElementById('rowCount').textContent = result.total_rows;
+            document.getElementById('colCount').textContent = document.querySelectorAll('#previewArea th').length;
+
+            // Generate example queries based on columns
+            generateExampleQueries(result.stats.columns);
+            
+        } catch (error) {
+            showError('Error uploading file: ' + error.message);
+            currentFileName = null;
+            tableSchema = null;
+        } finally {
+            isProcessing = false;
+            submitButton.disabled = false;
+        }
+    });
 
 function generateExampleQueries(columns) {
     const exampleQueriesDiv = document.getElementById('exampleQueries');
@@ -290,7 +373,82 @@ document.getElementById('submitQuery').addEventListener('click', async function(
     }
 });
 
+document.getElementById('exportCSV').addEventListener('click', function(e) {
+    e.preventDefault();
+    exportData('csv');
+});
+
+document.getElementById('exportJSON').addEventListener('click', function(e) {
+    e.preventDefault();
+    exportData('json');
+});
+
+document.getElementById('exportPDF').addEventListener('click', function(e) {
+    e.preventDefault();
+    exportData('pdf');
+});
+
+async function exportData(format) {
+    if (!currentFileName) {
+        showError('No data available to export');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/export/${format}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                filename: currentFileName
+            })
+        });
+        
+        if (format === 'pdf') {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `export.${format}`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+        } else {
+            const result = await response.json();
+            if (result.error) {
+                showError(result.error);
+                return;
+            }
+            showSuccess(`Data exported as ${format.toUpperCase()}`);
+        }
+    } catch (error) {
+        console.error('Export error:', error);
+        showError(`Failed to export as ${format.toUpperCase()}: ${error.message}`);
+    }
+}
+
 // Helper functions
+function showChartLoading() {
+    document.getElementById('visualizationArea').innerHTML = `
+        <div class="text-center p-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading chart...</span>
+            </div>
+            <p class="mt-2">Generating visualization...</p>
+        </div>`;
+}
+
+function showSummaryLoading() {
+    document.getElementById('summaryArea').innerHTML = `
+        <div class="text-center p-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading summary...</span>
+            </div>
+            <p class="mt-2">Calculating statistics...</p>
+        </div>`;
+}
 function displayResults(results) {
     // Clear any existing timeout
     if (processTimeout) {
@@ -410,9 +568,8 @@ function updateAxisSelectors(columns) {
 }
 
 // Replace the existing showError and showSuccess functions in main.js with these:
-
 function showError(message) {
-    const toastContainer = document.getElementById('toastContainer') || createToastContainer();
+    const toastContainer = document.getElementById('toastContainer');
     const toast = document.createElement('div');
     toast.className = 'toast-notification error animate__animated animate__fadeInRight';
     toast.innerHTML = `
@@ -438,7 +595,7 @@ function showError(message) {
 }
 
 function showSuccess(message) {
-    const toastContainer = document.getElementById('toastContainer') || createToastContainer();
+    const toastContainer = document.getElementById('toastContainer');
     const toast = document.createElement('div');
     toast.className = 'toast-notification success animate__animated animate__fadeInRight';
     toast.innerHTML = `
@@ -535,4 +692,34 @@ function updateDataStats(previewHTML) {
     } catch (error) {
         showError('Error updating data statistics');
     }
+}
+
+function validateFile(file) {
+    // Check file type
+    if (!file.name.endsWith('.csv')) {
+        showError('Please upload a CSV file');
+        return false;
+    }
+    
+    // Check file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+        showError('File size exceeds 10MB limit');
+        return false;
+    }
+    
+    return true;
+}
+
+function validateQuery(query) {
+    if (!query.trim()) {
+        showError('Query cannot be empty');
+        return false;
+    }
+    
+    if (query.length > 5000) {
+        showError('Query is too long (max 5000 characters)');
+        return false;
+    }
+    
+    return true;
 }
