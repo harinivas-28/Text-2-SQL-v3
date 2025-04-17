@@ -14,6 +14,35 @@ window.onunhandledrejection = function(event) {
     event.preventDefault(); // Prevents default browser error handling
 };
 
+// File selection handling
+document.getElementById('csvFile').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        showSelectedFile(file);
+    }
+});
+
+function showSelectedFile(file) {
+    const selectedFileDiv = document.getElementById('selectedFile');
+    const fileName = document.getElementById('fileName');
+    const fileSize = document.getElementById('fileSize');
+    const uploadProgress = document.getElementById('uploadProgress').querySelector('.progress-bar');
+    
+    // Show selected file info
+    fileName.textContent = file.name;
+    fileSize.textContent = formatFileSize(file.size);
+    selectedFileDiv.classList.remove('d-none');
+    uploadProgress.style.width = '0%';
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
 // File upload handling
 document.getElementById('uploadForm').addEventListener('submit', async function(e) {
     e.preventDefault();
@@ -32,6 +61,7 @@ document.getElementById('uploadForm').addEventListener('submit', async function(
     const fileInput = document.getElementById('csvFile');
     const submitButton = document.getElementById('submitQuery');
     const previewArea = document.getElementById('previewArea');
+    const uploadProgress = document.getElementById('uploadProgress').querySelector('.progress-bar');
     
     if (!fileInput.files.length) {
         showError('Please select a file to upload');
@@ -57,6 +87,15 @@ document.getElementById('uploadForm').addEventListener('submit', async function(
             <p class="mt-2">Loading your data...</p>
         </div>`;
 
+    // Simulate upload progress
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+        progress += 5;
+        if (progress <= 90) {
+            uploadProgress.style.width = progress + '%';
+        }
+    }, 100);
+
     const file = fileInput.files[0];
     const formData = new FormData();
     formData.append('file', file);
@@ -66,6 +105,9 @@ document.getElementById('uploadForm').addEventListener('submit', async function(
             method: 'POST',
             body: formData
         });
+
+        clearInterval(progressInterval);
+        uploadProgress.style.width = '100%';
 
         const result = await response.json();
         
@@ -94,7 +136,8 @@ document.getElementById('uploadForm').addEventListener('submit', async function(
         document.getElementById('rowCount').textContent = result.total_rows;
         document.getElementById('colCount').textContent = document.querySelectorAll('#previewArea th').length;
 
-        showSuccess('File uploaded successfully');
+        // Generate example queries based on columns
+        generateExampleQueries(result.stats.columns);
         
     } catch (error) {
         showError('Error uploading file: ' + error.message);
@@ -105,6 +148,51 @@ document.getElementById('uploadForm').addEventListener('submit', async function(
         submitButton.disabled = false;
     }
 });
+
+function generateExampleQueries(columns) {
+    const exampleQueriesDiv = document.getElementById('exampleQueries');
+    exampleQueriesDiv.innerHTML = '';
+    
+    const queries = [];
+    
+    // Get numeric and categorical columns
+    const numericColumns = columns.filter(col => ['int64', 'float64'].includes(col.dtype));
+    const categoricalColumns = columns.filter(col => !['int64', 'float64'].includes(col.dtype));
+    
+    // Generate example queries based on column types
+    if (numericColumns.length > 0) {
+        queries.push(
+            `What is the average ${numericColumns[0].name}?`,
+            `Show me the highest ${numericColumns[0].name}`,
+            `What is the distribution of ${numericColumns[0].name}?`
+        );
+    }
+    
+    if (categoricalColumns.length > 0) {
+        queries.push(
+            `How many entries for each ${categoricalColumns[0].name}?`,
+            `Show all unique ${categoricalColumns[0].name} values`
+        );
+    }
+    
+    if (numericColumns.length > 0 && categoricalColumns.length > 0) {
+        queries.push(
+            `What is the average ${numericColumns[0].name} by ${categoricalColumns[0].name}?`,
+            `Show ${numericColumns[0].name} distribution for each ${categoricalColumns[0].name}`
+        );
+    }
+    
+    // Add example queries to the UI
+    queries.forEach(query => {
+        const button = document.createElement('button');
+        button.className = 'btn btn-outline-secondary btn-sm example-query';
+        button.textContent = query;
+        button.addEventListener('click', () => {
+            document.getElementById('queryInput').value = query;
+        });
+        exampleQueriesDiv.appendChild(button);
+    });
+}
 
 // Query processing
 document.getElementById('submitQuery').addEventListener('click', async function() {
