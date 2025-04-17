@@ -41,7 +41,7 @@ def get_db_connection():
         connection.close()
 
 def create_visualization(df, query):
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(12, 8))  # Increase figure size
     
     if len(df.columns) == 1:
         col = df.columns[0]
@@ -70,7 +70,7 @@ def create_visualization(df, query):
             sns.heatmap(pd.crosstab(df[col1], df[col2]), annot=True, fmt='d')
             plt.title(f'Heatmap of {col1} vs {col2}')
     
-    plt.tight_layout()
+    plt.tight_layout(pad=2.0)  # Increase padding
     
     buffer = io.BytesIO()
     plt.savefig(buffer, format='png', dpi=300, bbox_inches='tight')

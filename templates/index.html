@@ -488,8 +488,21 @@
 
     /* Chart container */
     .chart-container {
-        height: 400px;
+        min-height: 500px;  /* Increase minimum height */
+        height: auto !important;
         position: relative;
+        margin-bottom: 20px;
+        overflow: visible;
+    }
+
+    .chart-container img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: 0 auto;
+    }
+    .tab-pane {
+        padding: 15px;
     }
 
     /* SQL display */
@@ -567,6 +580,11 @@
     .toast-close:hover {
         color: #000;
     }
+    @media (max-width: 768px) {
+    .chart-container {
+        min-height: 350px;
+    }
+}
 </style>
 
 <script>

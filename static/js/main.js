@@ -197,6 +197,7 @@ function generateExampleQueries(columns) {
 // Query processing
 document.getElementById('submitQuery').addEventListener('click', async function() {
     if (!currentFileName) {
+        showError('Please upload a file first');
         return;
     }
 
@@ -204,6 +205,7 @@ document.getElementById('submitQuery').addEventListener('click', async function(
     const query = queryInput.value.trim();
     
     if (!query) {
+        showError('Please enter a query');
         return;
     }
 
@@ -226,43 +228,62 @@ document.getElementById('submitQuery').addEventListener('click', async function(
 
         const result = await response.json();
         
-        if (!result.error) {
-            // Display results in table view
-            displayResults(result.result);
-
-            // Update visualization if available
-            if (result.plot) {
-                updateVisualization(result.plot);
-            }
-
-            // Update summary statistics if available
-            if (result.summary && Object.keys(result.summary).length > 0) {
-                updateSummary(result.summary);
-            }
-
-            // Always show SQL since checkbox is checked by default
-            const sqlDisplay = document.getElementById('sqlDisplay');
-            const sqlCode = document.getElementById('sqlCode');
-            if (result.sql_query) {
-                sqlDisplay.classList.remove('d-none');
-                sqlCode.textContent = result.sql_query;
-            }
-
-            // Show result footer with stats
-            if (result.result && result.result.length > 0) {
-                const resultFooter = document.getElementById('resultFooter');
-                resultFooter.classList.remove('d-none');
-                document.getElementById('resultCount').textContent = result.result.length;
-            }
-
-            // Update chart controls if we have data
-            if (result.columns && result.columns.length > 0) {
-                document.getElementById('chartControls').classList.remove('d-none');
-                updateAxisSelectors(result.columns);
-            }
+        if (result.error) {
+            showError(result.error);
+            return;
         }
+
+        // Display results in table view
+        displayResults(result.result);
+
+        // Update visualization if available
+        if (result.plot) {
+            updateVisualization(result.plot);
+        } else {
+            document.getElementById('visualizationArea').innerHTML = '<div class="no-chart-message text-center p-5"><i class="fas fa-chart-area fa-3x text-muted mb-3"></i><h5 class="text-muted">No visualization available for this query</h5></div>';
+        }
+
+        // Update summary statistics if available
+        if (result.summary && Object.keys(result.summary).length > 0) {
+            updateSummary(result.summary);
+        } else {
+            document.getElementById('summaryArea').innerHTML = '<div class="text-center p-4">No summary statistics available for this query</div>';
+        }
+
+        // Show SQL if checkbox is checked
+        const showSQL = document.getElementById('showSQL').checked;
+        const sqlDisplay = document.getElementById('sqlDisplay');
+        const sqlCode = document.getElementById('sqlCode');
+        
+        if (showSQL && result.sql_query) {
+            sqlDisplay.classList.remove('d-none');
+            sqlCode.textContent = result.sql_query;
+        } else {
+            sqlDisplay.classList.add('d-none');
+        }
+
+        // Show result footer with stats
+        if (result.result && result.result.length > 0) {
+            const resultFooter = document.getElementById('resultFooter');
+            resultFooter.classList.remove('d-none');
+            document.getElementById('resultCount').textContent = result.result.length;
+            document.getElementById('queryTime').textContent = result.execution_time || '0';
+        }
+
+        // Update chart controls if we have data
+        if (result.columns && result.columns.length > 0) {
+            document.getElementById('chartControls').classList.remove('d-none');
+            updateAxisSelectors(result.columns);
+        } else {
+            document.getElementById('chartControls').classList.add('d-none');
+        }
+        
+        // Show success notification
+        showSuccess('Query executed successfully');
+        
     } catch (error) {
         console.error('Error:', error);
+        showError('Failed to execute query: ' + error.message);
     } finally {
         querySpinner.classList.add('d-none');
         this.disabled = false;
@@ -312,7 +333,10 @@ function displayResults(results) {
 function updateVisualization(plotData) {
     const visualizationArea = document.getElementById('visualizationArea');
     if (plotData) {
-        visualizationArea.innerHTML = `<img src="data:image/png;base64,${plotData}" class="img-fluid" alt="Data visualization">`;
+        visualizationArea.innerHTML = `
+            <div class="chart-wrapper">
+                <img src="data:image/png;base64,${plotData}" class="img-fluid" alt="Data visualization">
+            </div>`;
     } else {
         visualizationArea.innerHTML = '<div class="no-chart-message text-center p-5"><i class="fas fa-chart-area fa-3x text-muted mb-3"></i><h5 class="text-muted">No visualization available</h5></div>';
     }
@@ -385,29 +409,58 @@ function updateAxisSelectors(columns) {
     });
 }
 
+// Replace the existing showError and showSuccess functions in main.js with these:
+
 function showError(message) {
-    // Only show critical errors
-    if (!message.includes('SQL execution error') && 
-        !message.includes('File not found')) {
-        return;
-    }
-    
     const toastContainer = document.getElementById('toastContainer') || createToastContainer();
     const toast = document.createElement('div');
-    toast.className = 'toast-notification error';
+    toast.className = 'toast-notification error animate__animated animate__fadeInRight';
     toast.innerHTML = `
         <div class="toast-content">
             <i class="fas fa-exclamation-circle"></i>
             <span>${message}</span>
-            <button type="button" class="toast-close" onclick="this.parentElement.parentElement.remove()">&times;</button>
+            <button type="button" class="toast-close">&times;</button>
         </div>`;
+    
     toastContainer.appendChild(toast);
-    setTimeout(() => toast && toast.parentNode && toast.remove(), 5000);
+    
+    toast.querySelector('.toast-close').addEventListener('click', () => {
+        toast.classList.add('animate__fadeOutRight');
+        setTimeout(() => toast.remove(), 300);
+    });
+    
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.classList.add('animate__fadeOutRight');
+            setTimeout(() => toast.remove(), 300);
+        }
+    }, 5000);
 }
 
 function showSuccess(message) {
-    // Disable success messages as they're not critical
-    return;
+    const toastContainer = document.getElementById('toastContainer') || createToastContainer();
+    const toast = document.createElement('div');
+    toast.className = 'toast-notification success animate__animated animate__fadeInRight';
+    toast.innerHTML = `
+        <div class="toast-content">
+            <i class="fas fa-check-circle"></i>
+            <span>${message}</span>
+            <button type="button" class="toast-close">&times;</button>
+        </div>`;
+    
+    toastContainer.appendChild(toast);
+    
+    toast.querySelector('.toast-close').addEventListener('click', () => {
+        toast.classList.add('animate__fadeOutRight');
+        setTimeout(() => toast.remove(), 300);
+    });
+    
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.classList.add('animate__fadeOutRight');
+            setTimeout(() => toast.remove(), 300);
+        }
+    }, 5000);
 }
 
 function createToastContainer() {
@@ -415,14 +468,13 @@ function createToastContainer() {
     if (!container) {
         container = document.createElement('div');
         container.id = 'toastContainer';
-        container.style.position = 'fixed';
-        container.style.top = '20px';
-        container.style.right = '20px';
-        container.style.zIndex = '9999';
+        container.className = 'position-fixed top-0 end-0 p-3';
+        container.style.zIndex = '1050';
         document.body.appendChild(container);
     }
     return container;
 }
+
 
 // Move styles to head only when document is ready
 document.addEventListener('DOMContentLoaded', function() {
