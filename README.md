@@ -1,6 +1,9 @@
 # Text-to-SQL Converter (Using Flask) 🔄
 
 Convert natural language questions to SQL queries using Google's Generative AI! 🤖
+<br>
+![Screenshot 2025-04-18 182708](https://github.com/user-attachments/assets/f48c4011-d8c1-46ed-bf2b-76d547fe9376)
+
 
 ## 📁 Project Structure
 
